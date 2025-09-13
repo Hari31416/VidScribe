@@ -1,6 +1,6 @@
 from langchain_litellm import ChatLiteLLM
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import OpenAI
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage
 from typing import List, AsyncGenerator, Dict, Optional, Union, Literal
 from pydantic import BaseModel
@@ -15,6 +15,7 @@ logger = create_simple_logger(__name__)
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
 
 __all__ = [
+    "create_llm_instance",
     "atext_completion",
     "atext_completion_stream",
     "acompletion_using_gemini",
@@ -27,14 +28,15 @@ __all__ = [
 def create_llm_instance(
     provider=Literal["google", "litellm", "openai", "openrouter"],
     response_format: Optional[BaseModel] = None,
+    model=LLM_MODEL,
     **kwargs: Dict,
-) -> Union[ChatGoogleGenerativeAI, ChatLiteLLM, OpenAI]:
+) -> Union[ChatGoogleGenerativeAI, ChatLiteLLM, ChatOpenAI]:
     """Create and return an instance of the specified LLM runnable using provider and kwargs."""
     chat_runnable_mapping = {
         "google": ChatGoogleGenerativeAI,
         "litellm": ChatLiteLLM,
-        "openai": OpenAI,
-        "openrouter": OpenAI,
+        "openai": ChatOpenAI,
+        "openrouter": ChatOpenAI,
     }
 
     if provider not in chat_runnable_mapping:
@@ -45,10 +47,7 @@ def create_llm_instance(
     chat_runnable = chat_runnable_mapping[provider]
     logger.debug(f"Selected chat runnable: {chat_runnable.__name__}")
 
-    if "model" not in kwargs:
-        kwargs["model"] = LLM_MODEL
-
-    to_remove = ["stream", "max_retries"]
+    to_remove = ["stream", "max_retries", "model"]
     for key in to_remove:
         if key in kwargs:
             kwargs.pop(key)
@@ -68,7 +67,7 @@ def create_llm_instance(
                 "X-Title": os.getenv("SITE_NAME", "example.com"),
             }
 
-    llm = chat_runnable(max_retries=3, **kwargs)
+    llm = chat_runnable(model=model, max_retries=3, **kwargs)
 
     if response_format:
         logger.debug("Applying structured output format.")
@@ -187,7 +186,7 @@ async def acompletion_using_openai(
     response_format: Optional[BaseModel] = None,
     **kwargs: Dict,
 ) -> str:
-    """Helper function specifically for OpenAI model completions."""
+    """Helper function specifically for ChatOpenAI model completions."""
     return await atext_completion(
         messages=messages,
         provider="openai",
