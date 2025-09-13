@@ -6,6 +6,9 @@ langchain==0.3.27
 # LLMs
 openai==1.107.2
 litellm==1.77.0
+langchain-litellm==0.2.2
+langchain-google-genai==2.1.10
+langchain_openai==0.3.33
 
 
 # Transcript
