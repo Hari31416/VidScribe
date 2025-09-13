@@ -2,7 +2,7 @@ from langchain_litellm import ChatLiteLLM
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import OpenAI
 from langchain_core.messages import BaseMessage
-from typing import List, Any, AsyncGenerator, Dict, Optional, Union
+from typing import List, AsyncGenerator, Dict, Optional, Union, Literal
 from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
@@ -24,12 +24,27 @@ __all__ = [
 ]
 
 
-def _create_llm_instance(
-    chat_runnable: Union[ChatGoogleGenerativeAI, ChatLiteLLM, OpenAI],
+def create_llm_instance(
+    provider=Literal["google", "litellm", "openai", "openrouter"],
     response_format: Optional[BaseModel] = None,
     **kwargs: Dict,
 ) -> Union[ChatGoogleGenerativeAI, ChatLiteLLM, OpenAI]:
-    """Create and return an instance of the specified LLM runnable."""
+    """Create and return an instance of the specified LLM runnable using provider and kwargs."""
+    chat_runnable_mapping = {
+        "google": ChatGoogleGenerativeAI,
+        "litellm": ChatLiteLLM,
+        "openai": OpenAI,
+        "openrouter": OpenAI,
+    }
+
+    if provider not in chat_runnable_mapping:
+        raise ValueError(
+            f"Unsupported provider: {provider}. Must be one of {list(chat_runnable_mapping.keys())}."
+        )
+
+    chat_runnable = chat_runnable_mapping[provider]
+    logger.debug(f"Selected chat runnable: {chat_runnable.__name__}")
+
     if "model" not in kwargs:
         kwargs["model"] = LLM_MODEL
 
@@ -37,6 +52,21 @@ def _create_llm_instance(
     for key in to_remove:
         if key in kwargs:
             kwargs.pop(key)
+
+    if provider == "openrouter":
+        # need to change API key and base URL for OpenRouter
+        logger.debug("Configuring OpenRouter specific settings.")
+        if "api_key" not in kwargs:
+            kwargs["api_key"] = os.getenv("OPENROUTER_API_KEY")
+        if "base_url" not in kwargs:
+            kwargs["base_url"] = os.getenv(
+                "OPENROUTER_API_BASE", "https://openrouter.ai/api/v1"
+            )
+        if "default_headers" not in kwargs:
+            kwargs["default_headers"] = {
+                "HTTP-Referer": os.getenv("SITE_URL", "example.com"),
+                "X-Title": os.getenv("SITE_NAME", "example.com"),
+            }
 
     llm = chat_runnable(max_retries=3, **kwargs)
 
@@ -48,17 +78,13 @@ def _create_llm_instance(
 
 async def atext_completion(
     messages: List[BaseMessage],
-    chat_runnable: Union[
-        ChatGoogleGenerativeAI, ChatLiteLLM, OpenAI
-    ] = ChatGoogleGenerativeAI,
+    provider: Literal["google", "litellm", "openai", "openrouter"] = "google",
     response_format: Optional[BaseModel] = None,
     **kwargs: Dict,
 ) -> str:
-    """Return full (non-streaming) completion text asynchronously.
-    messages: list of {role, content}
-    """
-    llm = _create_llm_instance(
-        chat_runnable=chat_runnable,
+    """Return full (non-streaming) completion text asynchronously."""
+    llm = create_llm_instance(
+        provider=provider,
         response_format=response_format,
         **kwargs,
     )
@@ -83,17 +109,15 @@ async def atext_completion(
 
 async def atext_completion_stream(
     messages: List[BaseMessage],
-    chat_runnable: Union[
-        ChatGoogleGenerativeAI, ChatLiteLLM, OpenAI
-    ] = ChatGoogleGenerativeAI,
+    provider: Literal["google", "litellm", "openai", "openrouter"] = "google",
     response_format: Optional[BaseModel] = None,
     **kwargs: Dict,
 ) -> AsyncGenerator[str, None]:
     """Async generator yielding incremental completion chunks without duplicates."""
     if "stream" not in kwargs:
         kwargs["stream"] = True
-    llm = _create_llm_instance(
-        chat_runnable=chat_runnable,
+    llm = create_llm_instance(
+        provider=provider,
         response_format=response_format,
         **kwargs,
     )
@@ -138,7 +162,7 @@ async def acompletion_using_gemini(
     """Helper function specifically for Gemini model completions."""
     return await atext_completion(
         messages=messages,
-        chat_runnable=ChatGoogleGenerativeAI,
+        provider="google",
         response_format=response_format,
         **kwargs,
     )
@@ -152,7 +176,7 @@ async def acompletion_using_litellm(
     """Helper function specifically for LiteLLM model completions."""
     return await atext_completion(
         messages=messages,
-        chat_runnable=ChatLiteLLM,
+        provider="litellm",
         response_format=response_format,
         **kwargs,
     )
@@ -166,7 +190,7 @@ async def acompletion_using_openai(
     """Helper function specifically for OpenAI model completions."""
     return await atext_completion(
         messages=messages,
-        chat_runnable=OpenAI,
+        provider="openai",
         response_format=response_format,
         **kwargs,
     )
@@ -180,13 +204,7 @@ async def acompletion_using_openrouter(
     """Helper function specifically for OpenRouter model completions."""
     return await atext_completion(
         messages=messages,
-        chat_runnable=OpenAI,
+        provider="openrouter",
         response_format=response_format,
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        base_url=os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1"),
-        default_headers={
-            "HTTP-Referer": os.getenv("YOUR_SITE_URL", "example.com"),
-            "X-Title": os.getenv("YOUR_SITE_NAME", "example.com"),
-        },
         **kwargs,
     )
