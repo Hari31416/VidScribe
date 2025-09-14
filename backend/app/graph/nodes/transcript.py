@@ -9,11 +9,11 @@ from app.utils import create_simple_logger
 
 
 logger = create_simple_logger(__name__)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# move two levels up to the 'app' directory
-app_dir = os.path.dirname(os.path.dirname(current_dir))
-# move to data/transcripts directory
-transcript_dir = os.path.join(app_dir, "data", "transcripts")
+cur_file_dir = os.path.dirname(os.path.abspath(__file__))
+# move three levels up to reach the 'backend' directory
+backend_dir = os.path.abspath(os.path.join(cur_file_dir, "../../../"))
+outputs_dir = os.path.join(backend_dir, "outputs")
+transcript_dir = os.path.join(outputs_dir, "transcripts")
 os.makedirs(transcript_dir, exist_ok=True)
 
 AVG_TOKENS_PER_TRANSCRIPT_ENTRY = 9
