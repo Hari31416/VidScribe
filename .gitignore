@@ -150,3 +150,6 @@ secrets.json
 *temp.ipynb
 *_temp.*
 temp
+
+# data, to be used for caching transcripts and other files
+backend/outputs
