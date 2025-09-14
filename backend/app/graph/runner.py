@@ -1,6 +1,5 @@
-from __future__ import annotations
-
-from typing import AsyncGenerator, Dict, Any, List, TypedDict, Tuple
+from typing import AsyncGenerator, Dict, Any, List, TypedDict, Tuple, Optional
+import asyncio
 
 from app.graph.graph import create_graph, OverAllState, RuntimeState
 from app.utils import create_simple_logger
@@ -13,6 +12,17 @@ class ProgressEvent(TypedDict, total=False):
     progress: int  # 0-100
     message: str
     data: Dict[str, Any]
+
+
+class StreamConfig(TypedDict, total=False):
+    # Whether to include any data at all
+    include_data: bool
+    # Only include these fields from state (subset of STATE_KEYS). If not provided, include all.
+    include_fields: List[str]
+    # For list fields: cap number of items
+    max_items_per_field: int
+    # For string fields and list items: cap characters
+    max_chars_per_field: int
 
 
 def _empty_overall_state() -> OverAllState:
@@ -97,6 +107,57 @@ def _update_state_from_obj(
         return
 
 
+def _shape_data_for_stream(
+    state: Dict[str, Any], stream_config: Optional[StreamConfig]
+) -> Dict[str, Any]:
+    """Return a shaped copy of state limited by stream_config for efficient UI streaming."""
+    if not stream_config:
+        stream_config = {}
+
+    include_data = stream_config.get("include_data", True)
+    if not include_data:
+        return {}
+
+    include_fields = set(stream_config.get("include_fields", list(STATE_KEYS)))
+    include_fields = include_fields.intersection(STATE_KEYS)
+    max_items = stream_config.get("max_items_per_field")
+    max_chars = stream_config.get("max_chars_per_field")
+
+    out: Dict[str, Any] = {}
+    for key in STATE_KEYS:
+        if key not in include_fields:
+            continue
+        val = state.get(key)
+        if val is None:
+            continue
+
+        # Lists (chunks, chunk_notes, formatted_notes)
+        if isinstance(val, list):
+            sliced = val
+            if isinstance(max_items, int) and max_items >= 0:
+                sliced = val[:max_items]
+            if isinstance(max_chars, int) and max_chars >= 0:
+                shaped_items: List[Any] = []
+                for item in sliced:
+                    shaped_items.append(
+                        item[:max_chars] if isinstance(item, str) else item
+                    )
+                out[key] = shaped_items
+            else:
+                out[key] = sliced
+        # Strings (collected_notes, summary)
+        elif isinstance(val, str):
+            out[key] = (
+                val[:max_chars]
+                if isinstance(max_chars, int) and max_chars >= 0
+                else val
+            )
+        else:
+            out[key] = val
+
+    return out
+
+
 async def stream_run_graph(
     *,
     video_id: str,
@@ -104,6 +165,8 @@ async def stream_run_graph(
     provider: str = "google",
     model: str = "gemini-2.0-flash",
     show_graph: bool = False,
+    stream_config: Optional[StreamConfig] = None,
+    cancel_event: Optional[asyncio.Event] = None,
 ) -> AsyncGenerator[ProgressEvent, None]:
     """Run the VidScribe graph and stream progress events with partial outputs.
 
@@ -120,23 +183,45 @@ async def stream_run_graph(
         num_chunks=int(num_chunks),
     )
 
+    # Early cancellation
+    if cancel_event and cancel_event.is_set():
+        yield {
+            "phase": "cancelled",
+            "progress": 0,
+            "message": "Execution cancelled",
+            "data": {},
+        }
+        return
+
     # Initial event
     progress, phase = _compute_progress(state, int(num_chunks))
     yield {
         "phase": phase,
         "progress": progress,
         "message": "Starting graph execution…",
-        "data": {
-            "chunks": [],
-            "chunk_notes": [],
-            "formatted_notes": [],
-            "collected_notes": "",
-            "summary": "",
-        },
+        "data": _shape_data_for_stream(
+            {
+                "chunks": [],
+                "chunk_notes": [],
+                "formatted_notes": [],
+                "collected_notes": "",
+                "summary": "",
+            },
+            stream_config,
+        ),
     }
 
     try:
         async for new_state in graph.astream(input=state, context=runtime):
+            # Check for cancellation between steps
+            if cancel_event and cancel_event.is_set():
+                yield {
+                    "phase": "cancelled",
+                    "progress": 0,
+                    "message": "Execution cancelled",
+                    "data": {},
+                }
+                return
             # Merge: be resilient to different shapes by scanning for known keys
             _update_state_from_obj(new_state, state)
 
@@ -155,13 +240,7 @@ async def stream_run_graph(
                 "phase": phase,
                 "progress": progress,
                 "message": message_map.get(phase, "Working…"),
-                "data": {
-                    "chunks": state.get("chunks", []),
-                    "chunk_notes": state.get("chunk_notes", []),
-                    "formatted_notes": state.get("formatted_notes", []),
-                    "collected_notes": state.get("collected_notes", ""),
-                    "summary": state.get("summary", ""),
-                },
+                "data": _shape_data_for_stream(state, stream_config),
             }
 
         # Done
@@ -169,14 +248,16 @@ async def stream_run_graph(
             "phase": "done",
             "progress": 100,
             "message": "Graph execution completed",
-            "data": {
-                "chunks": state.get("chunks", []),
-                "chunk_notes": state.get("chunk_notes", []),
-                "formatted_notes": state.get("formatted_notes", []),
-                "collected_notes": state.get("collected_notes", ""),
-                "summary": state.get("summary", ""),
-            },
+            "data": _shape_data_for_stream(state, stream_config),
         }
+    except asyncio.CancelledError:
+        yield {
+            "phase": "cancelled",
+            "progress": 0,
+            "message": "Execution cancelled",
+            "data": {},
+        }
+        return
     except Exception as e:
         logger.error(f"Graph execution failed: {e}", exc_info=True)
         yield {
