@@ -4,6 +4,9 @@ from langgraph.graph import StateGraph, START, END
 
 
 from app.graph.nodes import *
+from app.utils import create_simple_logger
+
+logger = create_simple_logger(__name__)
 
 
 class OverAllState(TypedDict):
@@ -33,7 +36,7 @@ def create_transcript_chunks(
 
 
 def create_graph(show_graph: bool = True) -> StateGraph:
-    builder = StateGraph(ChunkNotesAgentState, context_schema=RuntimeState)
+    builder = StateGraph(OverAllState, context_schema=RuntimeState)
 
     # start by chunking
     builder.add_node("create_transcript_chunks", create_transcript_chunks)
@@ -57,6 +60,7 @@ def create_graph(show_graph: bool = True) -> StateGraph:
     builder.add_edge("summarizer", END)
 
     graph = builder.compile()
+    logger.info("Graph successfully created.")
     if show_graph:
         from IPython.display import display
 
