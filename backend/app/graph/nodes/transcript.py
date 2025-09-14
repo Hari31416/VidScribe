@@ -1,4 +1,6 @@
 from typing import Dict, List
+import os
+import json
 
 from youtube_transcript_api import YouTubeTranscriptApi, FetchedTranscript
 from youtube_transcript_api.formatters import SRTFormatter
@@ -7,13 +9,41 @@ from app.utils import create_simple_logger
 
 
 logger = create_simple_logger(__name__)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# move two levels up to the 'app' directory
+app_dir = os.path.dirname(os.path.dirname(current_dir))
+# move to data/transcripts directory
+transcript_dir = os.path.join(app_dir, "data", "transcripts")
+os.makedirs(transcript_dir, exist_ok=True)
+
+AVG_TOKENS_PER_TRANSCRIPT_ENTRY = 9
 
 __all__ = [
     "get_transcript",
     "get_srt_transcript",
     "get_raw_transcript",
     "convert_ms_to_srt_time",
+    "extract_text_from_transcript_chunk",
 ]
+
+
+def transcript_file_path(video_id: str, file_extension: str = "srt") -> str:
+    """Generates the file path for storing the transcript of a YouTube video.
+
+    Parameters
+    ----------
+    video_id : str
+        The YouTube video ID.
+    file_extension : str, optional
+        The file extension for the transcript file, by default "srt"
+
+    Returns
+    -------
+    str
+        The full file path for the transcript file.
+    """
+    filename = f"{video_id}.{file_extension}"
+    return os.path.join(transcript_dir, filename)
 
 
 def get_transcript(
@@ -45,7 +75,10 @@ def get_transcript(
 
 
 def get_srt_transcript(
-    video_id: str, languages: List[str] = ["en"], preserve_formatting: bool = True
+    video_id: str,
+    languages: List[str] = ["en"],
+    preserve_formatting: bool = True,
+    overwrite: bool = False,
 ) -> str:
     """Gets the transcript of a YouTube video in SRT format.
 
@@ -63,16 +96,28 @@ def get_srt_transcript(
     str
         The transcript in SRT format.
     """
+    transcript_file = transcript_file_path(video_id, "srt")
+    if os.path.exists(transcript_file) and not overwrite:
+        with open(transcript_file, "r", encoding="utf-8") as file:
+            srt_content = file.read()
+            logger.info(f"Loaded cached SRT transcript for video ID: {video_id}")
+            return srt_content
 
     transcript = get_transcript(video_id, languages, preserve_formatting)
     formatter = SRTFormatter()
     transcript_formatted = formatter.format_transcript(transcript)
     logger.debug(f"Formatted transcript to SRT format for video ID: {video_id}")
+    with open(transcript_file, "w", encoding="utf-8") as file:
+        file.write(transcript_formatted)
+        logger.info(f"Saved SRT transcript to {transcript_file}")
     return transcript_formatted
 
 
 def get_raw_transcript(
-    video_id: str, languages: List[str] = ["en"], preserve_formatting: bool = True
+    video_id: str,
+    languages: List[str] = ["en"],
+    preserve_formatting: bool = True,
+    overwrite: bool = False,
 ) -> List[Dict[str, str | float]]:
     """Gets the raw transcript data of a YouTube video.
 
@@ -90,10 +135,20 @@ def get_raw_transcript(
     list[dict]
         The raw transcript data as a list of dictionaries.
     """
+    raw_file = transcript_file_path(video_id, "json")
+    if os.path.exists(raw_file) and not overwrite:
+        with open(raw_file, "r", encoding="utf-8") as file:
+            raw_data = json.load(file)
+            logger.info(f"Loaded cached raw transcript for video ID: {video_id}")
+            return raw_data
 
     transcript = get_transcript(video_id, languages, preserve_formatting)
     logger.debug(f"Returning raw transcript data for video ID: {video_id}")
-    return transcript.to_raw_data()
+    data = transcript.to_raw_data()
+    with open(raw_file, "w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=4)
+        logger.info(f"Saved raw transcript to {raw_file}")
+    return data
 
 
 def convert_ms_to_srt_time(milliseconds: float) -> str:
@@ -114,3 +169,32 @@ def convert_ms_to_srt_time(milliseconds: float) -> str:
     seconds = int((milliseconds % 60000) // 1000)
     millis = int(milliseconds % 1000)
     return f"{hours:02}:{minutes:02}:{seconds:02},{millis:03}"
+
+
+def extract_text_from_transcript_chunk(
+    transcript_chunk: List[Dict[str, str | float]], add_timestamps: bool = True
+) -> str:
+    """
+    Extracts and concatenates text from a chunk of transcript entries.
+
+    Parameters
+    ----------
+    transcript_chunk : List[Dict[str, str|float]]
+        A chunk of the transcript, where each entry is a dictionary containing 'text' and other metadata.
+    add_timestamps : bool, optional
+        Whether to prepend timestamps to each text entry, by default True.
+
+    Returns
+    -------
+    str
+        The concatenated text from the transcript chunk.
+    """
+    final_text = ""
+    for entry in transcript_chunk:
+        text = entry.get("text", "")
+        if add_timestamps:
+            time = convert_ms_to_srt_time(int(entry.get("start", 0) * 1000))
+            final_text += f"[{time}] {text}\n"
+        else:
+            final_text += f"{text} "
+    return final_text.strip()
