@@ -25,3 +25,7 @@ gradio==5.45.0
 # Utils
 tqdm==4.67.1
 pydantic==2.11.9
+
+# API Server
+fastapi==0.116.1
+uvicorn==0.35.0
