@@ -118,7 +118,11 @@ def _shape_data_for_stream(
     if not include_data:
         return {}
 
-    include_fields = set(stream_config.get("include_fields", list(STATE_KEYS)))
+    raw_include_fields = stream_config.get("include_fields")
+    if not raw_include_fields:
+        include_fields = set(STATE_KEYS)
+    else:
+        include_fields = set(raw_include_fields)
     include_fields = include_fields.intersection(STATE_KEYS)
     max_items = stream_config.get("max_items_per_field")
     max_chars = stream_config.get("max_chars_per_field")
