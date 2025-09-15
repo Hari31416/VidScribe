@@ -168,6 +168,7 @@ async def stream_run_graph(
     num_chunks: int = 2,
     provider: str = "google",
     model: str = "gemini-2.0-flash",
+    refresh_notes: bool = False,
     show_graph: bool = False,
     stream_config: Optional[StreamConfig] = None,
     cancel_event: Optional[asyncio.Event] = None,
@@ -185,6 +186,7 @@ async def stream_run_graph(
         model=model,
         video_id=video_id,
         num_chunks=int(num_chunks),
+        refresh_notes=refresh_notes,
     )
 
     # Early cancellation

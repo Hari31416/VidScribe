@@ -22,6 +22,7 @@ class RuntimeState(TypedDict):
     model: str = "gemini-2.0-flash"
     video_id: str
     num_chunks: int = 2
+    refresh_notes: bool = False
 
 
 def create_transcript_chunks(
