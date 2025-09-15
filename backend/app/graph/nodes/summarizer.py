@@ -17,9 +17,14 @@ class SummarizerState(TypedDict):
     summary: str
 
 
-def save_summary(video_id: str, text: str) -> None:
+def save_summary_path(video_id: str) -> str:
     path = create_path_to_save_notes(video_id)
     file_path = os.path.join(path, "summary.md")
+    return file_path
+
+
+def save_summary(video_id: str, text: str) -> None:
+    file_path = save_summary_path(video_id=video_id)
     with open(file_path, "w") as file:
         file.write(text)
     logger.info(f"Summary saved at: {file_path}")
@@ -27,6 +32,14 @@ def save_summary(video_id: str, text: str) -> None:
 
 async def summarizer_node(state: SummarizerState, runtime: Runtime) -> SummarizerState:
     """Generates a summary of the given text using an LLM based on the provided runtime configuration."""
+    file_path = save_summary_path(video_id=runtime.context["video_id"])
+    if os.path.exists(file_path) and not runtime.context.get("refresh_notes", False):
+        logger.info(f"Skipping summarization as summary already saved at: {file_path}")
+        with open(file_path, "r") as file:
+            saved_text = file.read()
+        state["summary"] = saved_text
+        return state
+
     llm = create_llm_instance(
         provider=runtime.context["provider"], model=runtime.context["model"]
     )

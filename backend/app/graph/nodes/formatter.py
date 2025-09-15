@@ -1,10 +1,9 @@
 import os
 from typing_extensions import TypedDict
-from typing import Literal
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.runtime import Runtime
 
-from .notes import create_path_to_save_notes
+from .notes import save_intermediate_text, save_intermediate_text_path
 from app.services import create_llm_instance
 from app.prompts import FORMATTER_SYSTEM_PROMPT
 from app.utils import create_simple_logger
@@ -23,31 +22,28 @@ class FormatterStateAll(TypedDict):
     formatted_notes: list[str]
 
 
-def save_intermediate_text(
-    video_id: str,
-    chunk_number: int | str,
-    text: str,
-    note_type: Literal["raw", "formatted"] = "formatted",
-) -> None:
-    path = create_path_to_save_notes(video_id)
-    path = os.path.join(path, "partial")
-    os.makedirs(path, exist_ok=True)
-    file_path = os.path.join(path, f"{note_type}_chunk_{chunk_number}.md")
-    with open(file_path, "w") as file:
-        file.write(text)
-    logger.info(f"Intermediate {note_type} text saved at: {file_path}")
-
-
 async def format_one_doc(
     llm, original_text, current_chunk, runtime: Runtime
 ) -> FormatterStateOne:
     """Formats the given text using an LLM based on the provided runtime configuration."""
-    save_intermediate_text(
+    file_path = save_intermediate_text_path(
         video_id=runtime.context["video_id"],
         chunk_number=current_chunk,
-        text=original_text,
-        note_type="raw",
+        note_type="formatted",
     )
+    if os.path.exists(file_path):
+        logger.info(
+            f"Skipping formatting for chunk {current_chunk} as formatted text already saved at: {file_path}"
+        )
+        with open(file_path, "r") as file:
+            saved_text = file.read()
+        out = FormatterStateOne(
+            original_text=original_text,
+            formatted_text=saved_text,
+            chunk_number=current_chunk,
+        )
+        return out
+
     llm = create_llm_instance(
         provider=runtime.context["provider"], model=runtime.context["model"]
     )
