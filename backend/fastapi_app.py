@@ -42,6 +42,7 @@ class RunRequest(BaseModel):
     provider: str = "google"
     model: str = "gemini-2.0-flash"
     show_graph: bool = False
+    refresh_notes: bool = False
     stream_config: Optional[StreamConfigModel] = None
 
 
@@ -76,6 +77,7 @@ async def run_stream(req: RunRequest):
                 show_graph=req.show_graph,
                 stream_config=sc,
                 cancel_event=cancel_event,
+                refresh_notes=req.refresh_notes,
             ):
                 yield _to_sse(event)
         except Exception as e:
@@ -106,6 +108,7 @@ async def run_final(req: RunRequest):
             model=req.model,
             show_graph=req.show_graph,
             stream_config=sc,
+            refresh_notes=req.refresh_notes,
         ):
             last_event = event
     except Exception as e:

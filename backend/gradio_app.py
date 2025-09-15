@@ -42,6 +42,7 @@ async def run_graph(
     include_fields,
     max_items,
     max_chars,
+    refresh_notes,
 ):
     try:
         global _CANCEL_EVENT
@@ -57,6 +58,7 @@ async def run_graph(
             show_graph=False,
             stream_config=stream_config,
             cancel_event=_CANCEL_EVENT,
+            refresh_notes=refresh_notes,
         ):
             data = event.get("data", {})
             progress_text = event.get("message", "Working…")
@@ -146,7 +148,7 @@ with gr.Blocks() as demo:
             label="Video ID", placeholder="e.g., FOONnnq975k", value="wjZofJX0v4M"
         )
         num_chunks = gr.Number(label="Number of Chunks", value=2, minimum=1)
-
+        refresh_notes = gr.Checkbox(label="Refresh Notes", value=True)
     with gr.Row():
         provider = gr.Dropdown(
             label="Provider", choices=["google", "openai"], value="google"
@@ -175,6 +177,7 @@ with gr.Blocks() as demo:
             include_fields,
             max_items,
             max_chars,
+            refresh_notes,
         ],
         outputs=[
             progress_output,
