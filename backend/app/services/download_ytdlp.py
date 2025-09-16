@@ -213,3 +213,111 @@ def download_media(
         result.update({"status": "error", "error": str(e)})
 
     return result
+
+
+def download_thumbnail(
+    video_id: str, output_dir: str = downloads_dir, verbose: bool = False
+) -> Dict[str, Any]:
+    """Download the thumbnail of a YouTube video using yt_dlp.
+
+    Parameters
+    ----------
+    video_id : str
+        The YouTube video ID or URL to download the thumbnail from.
+    output_dir : str, optional
+        The directory where the downloaded thumbnail will be saved. Default is 'outputs/videos' in the backend directory.
+    verbose : bool, optional
+        If True, yt_dlp will output more detailed logs. Default is False.
+
+    Returns
+    -------
+    Dict[str, Any]
+        A dictionary containing the status of the download, title of the video,
+        and the path to the downloaded thumbnail file.
+    """
+
+    if video_id.startswith("http"):
+        video_id = video_id.split("v=")[-1].split("&")[0]
+
+    if not output_dir.endswith(video_id):
+        output_dir = os.path.join(output_dir, video_id)
+
+    if os.path.exists(output_dir):
+        files_in_dir = os.listdir(output_dir)
+        if files_in_dir:
+            logger.info(
+                f"Output directory {output_dir} already exists and is not empty. "
+                "Files may be overwritten."
+            )
+    os.makedirs(output_dir, exist_ok=True)
+    url = f"https://www.youtube.com/watch?v={video_id}"
+
+    ydl_opts: Dict[str, Any] = {
+        # Put all files under the provided output_dir regardless of playlist or single
+        "paths": {"home": output_dir},
+        "outtmpl": "%(title)s.%(ext)s",
+        "restrictfilenames": True,
+        "noprogress": False,
+        "quiet": not verbose,
+        "skip_download": True,  # We only want to download the thumbnail
+        "writethumbnail": True,  # Instruct yt_dlp to download the thumbnail
+    }
+
+    result: Dict[str, Any] = {
+        "status": "unknown",
+        "url": url,
+        "output_dir": os.path.abspath(output_dir),
+        "thumbnail_file": None,
+    }
+
+    def _hook(d: Dict[str, Any]):
+        if d.get("status") == "finished" and d.get("info_dict", {}).get("thumbnail"):
+            thumbnail_url = d["info_dict"]["thumbnail"]
+            title = d["info_dict"].get("title", "unknown_title")
+            ext = thumbnail_url.split(".")[-1].split("?")[
+                0
+            ]  # Handle URLs with query params
+            safe_title = str(title).replace(os.sep, "_")
+            filename = os.path.join(output_dir, f"{safe_title}.{ext}")
+            result["thumbnail_file"] = filename
+
+    ydl_opts.setdefault("progress_hooks", []).append(_hook)
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_probe = ydl.extract_info(url, download=False)
+            title = str(info_probe.get("title", "unknown_title"))
+
+            # Compute expected thumbnail filename using the same template and options
+            thumbnail_url = info_probe.get("thumbnail")
+            if thumbnail_url:
+                ext = thumbnail_url.split(".")[-1].split("?")[
+                    0
+                ]  # Handle URLs with query params
+                safe_title = title.replace(os.sep, "_")
+                expected_thumbnail = os.path.join(output_dir, f"{safe_title}.{ext}")
+            else:
+                expected_thumbnail = None
+
+            if expected_thumbnail and os.path.exists(expected_thumbnail):
+                logger.info("Skipping thumbnail download; file already exists.")
+                result.update(
+                    {
+                        "status": "skipped",
+                        "title": title,
+                        "thumbnail_file": expected_thumbnail,
+                    }
+                )
+                return result
+            info = ydl.extract_info(url, download=True)
+            result.update(
+                {
+                    "status": "success",
+                    "title": title,
+                }
+            )
+    except yt_dlp.utils.DownloadError as e:
+        result.update({"status": "error", "error": str(e)})
+    except Exception as e:  # pylint: disable=broad-except
+        result.update({"status": "error", "error": str(e)})
+    return result
