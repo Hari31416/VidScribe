@@ -36,7 +36,7 @@ def create_transcript_chunks(
     return {"chunks": chunks}
 
 
-def create_graph(show_graph: bool = True) -> StateGraph:
+def create_graph(show_graph: bool = True, **kwargs) -> StateGraph:
     builder = StateGraph(OverAllState, context_schema=RuntimeState)
 
     # start by chunking
@@ -60,7 +60,7 @@ def create_graph(show_graph: bool = True) -> StateGraph:
     builder.add_edge("collect_notes", "summarizer")
     builder.add_edge("summarizer", END)
 
-    graph = builder.compile()
+    graph = builder.compile(**kwargs)
     logger.info("Graph successfully created.")
     if show_graph:
         from IPython.display import display
