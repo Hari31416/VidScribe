@@ -132,6 +132,10 @@ def extract_frame(
     output_path = os.path.join(
         output_dir, f"frame_at_{timestamp.replace(':', '-')}.jpg"
     )
+    if os.path.exists(output_path):
+        logger.info(f"Frame already exists at {output_path}. Skipping extraction.")
+        img = Image.open(output_path)
+        return output_path, img
 
     _extract_frame(video_path, timestamp, output_path, verbose=verbose)
 
