@@ -33,7 +33,8 @@ def create_transcript_chunks(
         raw_transcript, num_chunks=runtime.context["num_chunks"], show_avg_tokens=True
     )
     chunks = [extract_text_from_transcript_chunk(chunk) for chunk in chunks]
-    return {"chunks": chunks}
+    state["chunks"] = chunks
+    return state
 
 
 def create_graph(show_graph: bool = True, **kwargs) -> StateGraph:
@@ -68,3 +69,10 @@ def create_graph(show_graph: bool = True, **kwargs) -> StateGraph:
         display(graph)
 
     return graph
+
+
+def display_graph(graph: StateGraph, **kwargs) -> None:
+    from IPython.display import display, Image
+
+    img = Image(graph.get_graph(**kwargs).draw_mermaid_png())
+    display(img)
