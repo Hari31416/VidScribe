@@ -76,20 +76,29 @@ class ImageIntegratorOverallState(TypedDict):
     inserted_images: List[ImageInsertionInput]
 
 
-def _save_generated_json_objects(
+def _save_generated_json_objects_path(
     video_id: str,
     chunk_number: int | str,
-    data: dict,
-    note_type: Literal["timestamps", "image_insertions"] = "timestamps",
+    json_type: Literal["timestamps", "image_insertions"] = "timestamps",
 ) -> None:
     path = create_path_to_save_notes(video_id)
     path = os.path.join(path, "partial")
     os.makedirs(path, exist_ok=True)
-    file_path = os.path.join(path, f"{note_type}_chunk_{chunk_number}.json")
+    file_path = os.path.join(path, f"{json_type}_chunk_{chunk_number}.json")
+    return file_path
+
+
+def _save_generated_json_objects(
+    video_id: str,
+    chunk_number: int | str,
+    data: dict,
+    json_type: Literal["timestamps", "image_insertions"] = "timestamps",
+) -> None:
+    file_path = _save_generated_json_objects_path(video_id, chunk_number, json_type)
 
     with open(file_path, "w") as file:
         json.dump(data, file, indent=4)
-    logger.info(f"Generated {note_type} JSON saved at: {file_path}")
+    logger.info(f"Generated {json_type} JSON saved at: {file_path}")
 
 
 def _read_generated_json_objects(
@@ -148,10 +157,10 @@ async def timestamp_generator_agent(
     runtime: Runtime,
 ) -> ImageIntegratorOverallState:
     """Generates timestamps for important moments in the chunk text based on the chunk notes."""
-    file_path = save_intermediate_text_path(
+    file_path = _save_generated_json_objects_path(
         video_id=runtime.context["video_id"],
         chunk_number=state["chunk_id"],
-        note_type="timestamps",
+        json_type="timestamps",
     )
     if os.path.exists(file_path):
         logger.info(
@@ -185,7 +194,7 @@ async def timestamp_generator_agent(
         video_id=runtime.context["video_id"],
         chunk_number=state["chunk_id"],
         data=response.model_dump(),
-        note_type="timestamps",
+        json_type="timestamps",
     )
     state["timestamps"] = response.timestamps
     return response
@@ -238,10 +247,10 @@ async def image_integrator_chunk_agent(
     runtime: Runtime,
 ) -> ImageIntegratorOverallState:
     """Uses LLM to decide where to insert images in the chunk notes based on the timestamps and captions."""
-    file_path = save_intermediate_text_path(
+    file_path = _save_generated_json_objects_path(
         video_id=runtime.context["video_id"],
         chunk_number=state["chunk_id"],
-        note_type="image_insertions",
+        json_type="image_insertions",
     )
     if os.path.exists(file_path):
         logger.info(
@@ -275,7 +284,7 @@ async def image_integrator_chunk_agent(
         video_id=runtime.context["video_id"],
         chunk_number=state["chunk_id"],
         data=response.model_dump(),
-        note_type="image_insertions",
+        json_type="image_insertions",
     )
     state["image_insertions"] = response.image_insertions
     return state
@@ -368,14 +377,8 @@ async def image_integrator_chunk(
         with open(file_path, "r") as file:
             saved_text = file.read()
         state["image_integrated_notes"] = saved_text
-        state["inserted_images"] = []
+        state["inserted_images"] = state.get("inserted_images", [])
         return state
-
-    # # Step 1: Extract frames at the specified timestamps
-    # image_extractions = await extract_frames(runtime, state["timestamps"])
-    # logger.info(f"Extracted {len(image_extractions)} frames from video.")
-
-    # Step 2: Map extracted frames to image insertions
     inserted_image = []
     image_extractions = state.get("inserted_images", [])
     for insertion in state["image_insertions"]:
@@ -397,7 +400,6 @@ async def image_integrator_chunk(
                 f"No extracted frame found for timestamp {insertion.timestamp}"
             )
 
-    # Step 3: Integrate images into chunk notes
     for img in inserted_image:
         img["frame_path"] = _convert_image_path_to_relative(
             img["frame_path"], runtime.context["video_id"]
