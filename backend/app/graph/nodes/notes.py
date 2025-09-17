@@ -37,7 +37,7 @@ def create_path_to_save_notes(video_id: str) -> str:
 def save_intermediate_text_path(
     video_id: str,
     chunk_number: int | str,
-    note_type: Literal["raw", "formatted"] = "formatted",
+    note_type: Literal["raw", "integrated", "formatted"] = "formatted",
 ) -> str:
     path = create_path_to_save_notes(video_id)
     path = os.path.join(path, "partial")
@@ -50,7 +50,7 @@ def save_intermediate_text(
     video_id: str,
     chunk_number: int | str,
     text: str,
-    note_type: Literal["raw", "formatted"] = "formatted",
+    note_type: Literal["raw", "integrated", "formatted"] = "formatted",
 ) -> None:
     file_path = save_intermediate_text_path(
         video_id=video_id, chunk_number=chunk_number, note_type=note_type
