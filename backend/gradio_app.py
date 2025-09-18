@@ -35,6 +35,7 @@ def _make_stream_config(compact_mode: bool, include_fields, max_items, max_chars
 
 async def run_graph(
     video_id,
+    video_path,
     num_chunks,
     provider,
     model,
@@ -52,6 +53,7 @@ async def run_graph(
         )
         async for event in stream_run_graph(
             video_id=video_id,
+            video_path=video_path,
             num_chunks=int(num_chunks),
             provider=provider,
             model=model,
@@ -67,6 +69,7 @@ async def run_graph(
                     "Cancelled by user",
                     "\n".join(data.get("chunks", []) or []),
                     "\n\n".join(data.get("chunk_notes", []) or []),
+                    "\n\n".join(data.get("image_integrated_notes", []) or []),
                     "\n\n".join(data.get("formatted_notes", []) or []),
                     data.get("collected_notes", ""),
                     data.get("summary", ""),
@@ -77,6 +80,7 @@ async def run_graph(
                 progress_text,
                 "\n".join(data.get("chunks", []) or []),
                 "\n\n".join(data.get("chunk_notes", []) or []),
+                "\n\n".join(data.get("image_integrated_notes", []) or []),
                 "\n\n".join(data.get("formatted_notes", []) or []),
                 data.get("collected_notes", ""),
                 data.get("summary", ""),
@@ -85,7 +89,7 @@ async def run_graph(
     except Exception as e:
         logger.error(f"Error running graph: {str(e)}", exc_info=True)
         error_msg = f"Error: {str(e)}"
-        yield (error_msg, "", "", "", "", "")
+        yield (error_msg, "", "", "", "", "", "")
 
 
 def cancel_run():
@@ -106,6 +110,7 @@ def _visibility_updates(compact_mode_val, include_fields_val):
     return (
         gr.update(visible=v("chunks")),
         gr.update(visible=v("chunk_notes")),
+        gr.update(visible=v("image_integrated_notes")),
         gr.update(visible=v("formatted_notes")),
         gr.update(visible=v("collected_notes")),
         gr.update(visible=v("summary")),
@@ -126,6 +131,7 @@ with gr.Blocks() as demo:
             choices=[
                 "chunks",
                 "chunk_notes",
+                "image_integrated_notes",
                 "formatted_notes",
                 "collected_notes",
                 "summary",
@@ -147,6 +153,10 @@ with gr.Blocks() as demo:
         video_id = gr.Textbox(
             label="Video ID", placeholder="e.g., FOONnnq975k", value="wjZofJX0v4M"
         )
+        video_path = gr.Textbox(
+            label="Video Path",
+            value="/home/hari/Desktop/VidScribe/backend/outputs/videos/wjZofJX0v4M/Transformers_the_tech_behind_LLMs_Deep_Learning_Chapter_5.mp4",
+        )
         num_chunks = gr.Number(label="Number of Chunks", value=2, minimum=1)
         refresh_notes = gr.Checkbox(label="Refresh Notes", value=True)
     with gr.Row():
@@ -162,6 +172,9 @@ with gr.Blocks() as demo:
     # Initial visibility matches default compact settings: formatted_notes + summary only
     chunks_output = gr.Textbox(label="Chunks", lines=5, visible=False)
     notes_output = gr.Textbox(label="Chunk Notes", lines=10, visible=False)
+    image_notes_output = gr.Textbox(
+        label="Image Integrated Notes", lines=10, visible=False
+    )
     formatted_output = gr.Textbox(label="Formatted Notes", lines=10, visible=True)
     collected_output = gr.Textbox(label="Collected Notes", lines=10, visible=False)
     summary_output = gr.Textbox(label="Summary", lines=5, visible=True)
@@ -170,6 +183,7 @@ with gr.Blocks() as demo:
         run_graph,
         inputs=[
             video_id,
+            video_path,
             num_chunks,
             provider,
             model,
@@ -183,6 +197,7 @@ with gr.Blocks() as demo:
             progress_output,
             chunks_output,
             notes_output,
+            image_notes_output,
             formatted_output,
             collected_output,
             summary_output,
@@ -202,6 +217,7 @@ with gr.Blocks() as demo:
         outputs=[
             chunks_output,
             notes_output,
+            image_notes_output,
             formatted_output,
             collected_output,
             summary_output,
@@ -214,6 +230,7 @@ with gr.Blocks() as demo:
         outputs=[
             chunks_output,
             notes_output,
+            image_notes_output,
             formatted_output,
             collected_output,
             summary_output,
