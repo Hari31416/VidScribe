@@ -29,6 +29,7 @@ def _empty_overall_state() -> OverAllState:
     return OverAllState(
         chunks=[],
         chunk_notes=[],
+        image_integrated_notes=[],
         formatted_notes=[],
         collected_notes="",
         summary="",
@@ -40,7 +41,8 @@ def _compute_progress(state: OverAllState, expected_chunks: int) -> Tuple[int, s
 
     We map phases as:
     - chunks: 20%
-    - chunk_notes: 20% -> 50% (scaled by completed notes out of expected)
+    - chunk_notes: 20% -> 40% (scaled by completed notes out of expected)
+    - image_integrated_notes: 40% -> 50% (scaled by integrated notes out of expected)
     - format_docs: 50% -> 80% (scaled by formatted out of expected)
     - collect_notes: 90%
     - summary: 100%
@@ -62,13 +64,21 @@ def _compute_progress(state: OverAllState, expected_chunks: int) -> Tuple[int, s
         pct = 50 + int(30 * (done / max(expected_chunks, 1)))
         return min(pct, 80), "format_docs"
 
+    # Image integration progress
+    image_int: List[str] = state.get("image_integrated_notes") or []
+    if image_int:
+        # Start at 40, end at 50
+        done = min(len(image_int), max(expected_chunks, 1))
+        pct = 40 + int(10 * (done / max(expected_chunks, 1)))
+        return min(pct, 50), "image_integration"
+
     # Chunk notes progress
     notes: List[str] = state.get("chunk_notes") or []
     if notes:
-        # Start at 20, end at 50
+        # Start at 20, end at 40
         done = min(len(notes), max(expected_chunks, 1))
-        pct = 20 + int(30 * (done / max(expected_chunks, 1)))
-        return min(pct, 50), "chunk_notes"
+        pct = 20 + int(20 * (done / max(expected_chunks, 1)))
+        return min(pct, 40), "chunk_notes"
 
     # Chunks created
     chunks: List[str] = state.get("chunks") or []
@@ -79,7 +89,14 @@ def _compute_progress(state: OverAllState, expected_chunks: int) -> Tuple[int, s
     return 0, "starting"
 
 
-STATE_KEYS = {"chunks", "chunk_notes", "formatted_notes", "collected_notes", "summary"}
+STATE_KEYS = {
+    "chunks",
+    "chunk_notes",
+    "image_integrated_notes",
+    "formatted_notes",
+    "collected_notes",
+    "summary",
+}
 
 
 def _update_state_from_obj(
@@ -165,6 +182,7 @@ def _shape_data_for_stream(
 async def stream_run_graph(
     *,
     video_id: str,
+    video_path: str,
     num_chunks: int = 2,
     provider: str = "google",
     model: str = "gemini-2.0-flash",
@@ -185,6 +203,7 @@ async def stream_run_graph(
         provider=provider,
         model=model,
         video_id=video_id,
+        video_path=video_path,
         num_chunks=int(num_chunks),
         refresh_notes=refresh_notes,
     )
@@ -209,6 +228,7 @@ async def stream_run_graph(
             {
                 "chunks": [],
                 "chunk_notes": [],
+                "image_integrated_notes": [],
                 "formatted_notes": [],
                 "collected_notes": "",
                 "summary": "",
@@ -237,6 +257,7 @@ async def stream_run_graph(
                 "starting": "Preparing…",
                 "chunks": "Chunks created",
                 "chunk_notes": "Chunk notes generated",
+                "image_integration": "Images integrated into notes",
                 "format_docs": "Notes formatted",
                 "collect_notes": "Notes collected",
                 "summary": "Summary generated",
