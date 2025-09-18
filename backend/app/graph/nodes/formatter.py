@@ -18,7 +18,7 @@ class FormatterStateOne(TypedDict):
 
 
 class FormatterStateAll(TypedDict):
-    chunk_notes: list[str]
+    image_integrated_notes: list[str]
     formatted_notes: list[str]
 
 
@@ -78,8 +78,10 @@ async def format_all_docs(
         provider=runtime.context["provider"], model=runtime.context["model"]
     )
     state["formatted_notes"] = []
-    for i, original_text in enumerate(state["chunk_notes"]):
-        logger.info(f"Working on formatting chunk {i+1}/{len(state['chunk_notes'])}")
+    for i, original_text in enumerate(state["image_integrated_notes"]):
+        logger.info(
+            f"Working on formatting chunk {i+1}/{len(state['image_integrated_notes'])}"
+        )
         state_chunk = await format_one_doc(
             llm, original_text, current_chunk=i + 1, runtime=runtime
         )
