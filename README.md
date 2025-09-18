@@ -65,7 +65,7 @@ pip install -r requirements.txt
 uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Example requests:
+Example requests (now also require a `video_path` pointing to the local downloaded video; this is used for frame extraction):
 
 - Streaming (SSE). You can test with curl; it will print events as they arrive.
 
@@ -74,6 +74,7 @@ curl -N -H "Content-Type: application/json" \
   -X POST http://localhost:8000/run/stream \
   -d '{
     "video_id": "wjZofJX0v4M",
+    "video_path": "/home/USER/Desktop/VidScribe/backend/outputs/videos/wjZofJX0v4M/Transformers_the_tech_behind_LLMs_Deep_Learning_Chapter_5.mp4",
     "num_chunks": 2,
     "provider": "google",
     "model": "gemini-2.0-flash",
@@ -88,6 +89,7 @@ curl -H "Content-Type: application/json" \
   -X POST http://localhost:8000/run/final \
   -d '{
     "video_id": "wjZofJX0v4M",
+    "video_path": "/home/USER/Desktop/VidScribe/backend/outputs/videos/wjZofJX0v4M/Transformers_the_tech_behind_LLMs_Deep_Learning_Chapter_5.mp4",
     "num_chunks": 2,
     "provider": "google",
     "model": "gemini-2.0-flash"
@@ -97,11 +99,14 @@ curl -H "Content-Type: application/json" \
 Notes:
 
 - The API reuses the existing LangGraph pipeline. For streaming, each SSE event has shape `{ phase, progress, message, data }`.
+- New pipeline phase: `image_integration` appears between `chunk_notes` and formatting when images are being integrated per chunk.
+- Progress mapping (heuristic): `chunks` (~20%) → `chunk_notes` (20–40%) → `image_integration` (40–50%) → `format_docs` (50–80%) → `collect_notes` (90%) → `summary` (100%).
+- `video_path` must point to the local MP4 used for frame extraction. You can derive it from the downloaded video directory (e.g. `backend/outputs/videos/{video_id}/...mp4`).
 - CORS is enabled for local development by default. Restrict origins before deploying.
 
 ## ⚠️ Status
 
-MVP is under active development: transcript → structured notes is working; API and Gradio available for local runs.
+MVP is under active development: transcript → structured notes working; image extraction & integration stage added; API and Gradio support streaming with selectable fields including `image_integrated_notes`.
 
 ## The Architecture
 
@@ -116,14 +121,14 @@ flowchart TD
     end
 
     %% Subgraph 2: Raw Notes to Image Integration
-    subgraph SG2 ["Image Extraction & Integration"]
-        RN["Raw Notes (per chunk)"]
-        TS["Timestamp Generator"]
-        IE["Image Extractor"]
-        II["Image Integrator"]
-        IN["Integrated Notes (per chunk)"]
-        FN["Formatted Notes (per chunk)"]
-    end
+  subgraph SG2 ["Image Extraction & Integration"]
+    RN["Raw Notes (per chunk)"]
+    TS["Timestamp Generator"]
+    IE["Image Extractor (frames)"]
+    II["Image Integrator"]
+    IN["Integrated Notes (per chunk)"]
+    FN["Formatted Notes (per chunk)"]
+  end
 
     %% Subgraph 3: Integrated Notes to Final Notes & Summary
     subgraph SG3 ["Notes Processing & Summarization"]
@@ -137,7 +142,7 @@ flowchart TD
     MF["Markdown Formatter"]
     VI --> TG --> CH --> NA
     NA -->|"multiple chunks"| RN
-    RN --> TS --> IE --> II --> IN --> MF --> FN
+  RN --> TS --> IE --> II --> IN --> MF --> FN
     FN -->|"multiple formatted chunks"| NC
     MF <--> NC --> FN1
     FN1 --> SA --> SM
