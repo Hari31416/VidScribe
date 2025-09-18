@@ -30,7 +30,7 @@ class StreamConfigModel(BaseModel):
     include_data: bool = True
     include_fields: Optional[List[str]] = Field(
         default=None,
-        description="Subset of ['chunks','chunk_notes','formatted_notes','collected_notes','summary']",
+        description="Subset of ['chunks','chunk_notes','image_integrated_notes','formatted_notes','collected_notes','summary']",
     )
     max_items_per_field: Optional[int] = None
     max_chars_per_field: Optional[int] = None
@@ -38,6 +38,7 @@ class StreamConfigModel(BaseModel):
 
 class RunRequest(BaseModel):
     video_id: str
+    video_path: str
     num_chunks: int = 2
     provider: str = "google"
     model: str = "gemini-2.0-flash"
@@ -61,7 +62,8 @@ async def run_stream(req: RunRequest):
     """Stream live progress as Server-Sent Events (SSE).
 
     Content-Type: text/event-stream
-    Each event has shape: { phase, progress, message, data }
+    Each event has shape: { phase, progress, message, data } where data may contain
+    keys: chunks, chunk_notes, image_integrated_notes, formatted_notes, collected_notes, summary
     """
 
     async def gen() -> AsyncGenerator[str, None]:
@@ -71,6 +73,7 @@ async def run_stream(req: RunRequest):
             sc = req.stream_config.model_dump() if req.stream_config else {}
             async for event in stream_run_graph(
                 video_id=req.video_id,
+                video_path=req.video_path,
                 num_chunks=int(req.num_chunks),
                 provider=req.provider,
                 model=req.model,
@@ -103,6 +106,7 @@ async def run_final(req: RunRequest):
         sc = req.stream_config.model_dump() if req.stream_config else {}
         async for event in stream_run_graph(
             video_id=req.video_id,
+            video_path=req.video_path,
             num_chunks=int(req.num_chunks),
             provider=req.provider,
             model=req.model,
