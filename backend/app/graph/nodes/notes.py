@@ -122,6 +122,12 @@ def convert_list_of_notes_to_xml(notes: list[str]) -> str:
     return xml_notes
 
 
+def _update_image_links_in_final_notes(final_notes: str) -> str:
+    # move from ../../../frames/ to ../../frames/ in the final notes
+    updated_notes = final_notes.replace("../../../frames/", "../../frames/")
+    return updated_notes
+
+
 async def notes_collector_agent_node(
     state: NotesCollectorAgentState, runtime: Runtime
 ) -> NotesCollectorAgentState:
@@ -144,8 +150,9 @@ async def notes_collector_agent_node(
     human_message = HumanMessage(content=notes_xml)
     response = await llm.ainvoke([system_message, human_message])
     if isinstance(response, AIMessage):
-        save_final_notes(video_id=runtime.context["video_id"], text=response.content)
-        state["collected_notes"] = response.content
+        updated_notes = _update_image_links_in_final_notes(response.content)
+        save_final_notes(video_id=runtime.context["video_id"], text=updated_notes)
+        state["collected_notes"] = updated_notes
     else:
         logger.error("Unexpected response type from LLM")
         state["collected_notes"] = ""
