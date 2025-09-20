@@ -9,10 +9,12 @@ import os
 import json
 
 from app.services import create_llm_instance, extract_frame
-from .notes import (
+from .utils import (
     save_intermediate_text,
     create_path_to_save_notes,
-    save_intermediate_text_path,
+    cache_generated_json,
+    save_generated_json_objects,
+    cache_intermediate_text,
 )
 from app.prompts import (
     TIMESTAMP_GENERATOR_SYSTEM_PROMPT,
@@ -24,9 +26,9 @@ logger = create_simple_logger(__name__)
 
 
 class TimestampGeneratorInput(TypedDict):
-    chunk_text: str
-    chunk_notes: str
-    chunk_id: int = 1
+    chunk: str
+    chunk_note: str
+    chunk_idx: int = 1
 
 
 class Timestamp(BaseModel):
@@ -40,7 +42,7 @@ class TimestampGeneratorOutput(BaseModel):
 
 class ImageIntegratorInput(TypedDict):
     timestamps: List[Timestamp]
-    chunk_notes: str
+    chunk_note: str
 
 
 class ImageInsertion(BaseModel):
@@ -67,55 +69,13 @@ class ImageInsertionInput(TypedDict):
 
 
 class ImageIntegratorOverallState(TypedDict):
-    chunk_text: str
-    chunk_notes: str
-    chunk_id: int = 1
+    chunk: str
+    chunk_note: str
+    chunk_idx: int = 1
     image_insertions: List[ImageInsertion]
     image_integrated_notes: str
     timestamps: List[Timestamp]
     inserted_images: List[ImageInsertionInput]
-
-
-def _save_generated_json_objects_path(
-    video_id: str,
-    chunk_number: int | str,
-    json_type: Literal["timestamps", "image_insertions"] = "timestamps",
-) -> None:
-    path = create_path_to_save_notes(video_id)
-    path = os.path.join(path, "partial")
-    os.makedirs(path, exist_ok=True)
-    file_path = os.path.join(path, f"{json_type}_chunk_{chunk_number}.json")
-    return file_path
-
-
-def _save_generated_json_objects(
-    video_id: str,
-    chunk_number: int | str,
-    data: dict,
-    json_type: Literal["timestamps", "image_insertions"] = "timestamps",
-) -> None:
-    file_path = _save_generated_json_objects_path(video_id, chunk_number, json_type)
-
-    with open(file_path, "w") as file:
-        json.dump(data, file, indent=4)
-    logger.info(f"Generated {json_type} JSON saved at: {file_path}")
-
-
-def _read_generated_json_objects(
-    video_id: str,
-    chunk_number: int | str,
-    note_type: Literal["timestamps", "image_insertions"] = "timestamps",
-) -> dict | None:
-    path = create_path_to_save_notes(video_id)
-    path = os.path.join(path, "partial")
-    file_path = os.path.join(path, f"{note_type}_chunk_{chunk_number}.json")
-    if not os.path.exists(file_path):
-        return None
-
-    with open(file_path, "r") as file:
-        data = json.load(file)
-    logger.info(f"Read existing {note_type} JSON from: {file_path}")
-    return data
 
 
 def _convert_image_path_to_relative(image_path: str, video_id: str) -> str:
@@ -127,9 +87,7 @@ def _convert_image_path_to_relative(image_path: str, video_id: str) -> str:
     return image_path
 
 
-def _format_chunk_text_for_timestamp_generator(
-    chunk_text: str, chunk_notes: str
-) -> str:
+def _format_chunk_for_timestamp_generator(chunk: str, chunk_note: str) -> str:
     """Formats the chunk text and notes for the timestamp generator prompt. Format is:
 
     <transcript>
@@ -142,10 +100,10 @@ def _format_chunk_text_for_timestamp_generator(
     formatted_text = dedent(
         f"""
         <transcript>
-        {chunk_text}
+        {chunk}
         </transcript>
         <notes>
-        {chunk_notes}
+        {chunk_note}
         </notes>
         """
     ).strip()
@@ -157,25 +115,16 @@ async def timestamp_generator_agent(
     runtime: Runtime,
 ) -> ImageIntegratorOverallState:
     """Generates timestamps for important moments in the chunk text based on the chunk notes."""
-    file_path = _save_generated_json_objects_path(
+    timestamps = cache_generated_json(
         video_id=runtime.context["video_id"],
-        chunk_number=state["chunk_id"],
         json_type="timestamps",
+        chunk_idx=state["chunk_idx"],
+        total_chunks=runtime.context.get("total_chunks"),
+        refresh_json=runtime.context.get("refresh_notes", False),
     )
-    if os.path.exists(file_path):
-        logger.info(
-            f"Skipping timestamp generation for chunk {state['chunk_id']} as timestamps already exist at: {file_path}"
-        )
-        existing_data = _read_generated_json_objects(
-            video_id=runtime.context["video_id"],
-            chunk_number=state["chunk_id"],
-            note_type="timestamps",
-        )
-        if existing_data:
-            state["timestamps"] = [
-                Timestamp(**ts) for ts in existing_data.get("timestamps", [])
-            ]
-        return state
+    if timestamps:
+        timestamps = [Timestamp(**ts) for ts in timestamps.get("timestamps", [])]
+        return {"timestamps": timestamps}
 
     llm = create_llm_instance(
         provider=runtime.context["provider"],
@@ -184,15 +133,17 @@ async def timestamp_generator_agent(
     )
     system_message = SystemMessage(content=TIMESTAMP_GENERATOR_SYSTEM_PROMPT)
     human_message = HumanMessage(
-        content=_format_chunk_text_for_timestamp_generator(
-            state["chunk_text"], state["chunk_notes"]
+        content=_format_chunk_for_timestamp_generator(
+            state["chunk"], state["chunk_note"]
         )
     )
     response = await llm.ainvoke([system_message, human_message])
-    assert isinstance(response, TimestampGeneratorOutput)
-    _save_generated_json_objects(
+    assert isinstance(
+        response, TimestampGeneratorOutput
+    ), "LLM response is not of type TimestampGeneratorOutput"
+    save_generated_json_objects(
         video_id=runtime.context["video_id"],
-        chunk_number=state["chunk_id"],
+        chunk_number=state["chunk_idx"],
         data=response.model_dump(),
         json_type="timestamps",
     )
@@ -200,8 +151,8 @@ async def timestamp_generator_agent(
     return response
 
 
-def _format_chunk_text_for_image_integrator(
-    timestamps: List[Timestamp], chunk_notes: str
+def _format_chunk_for_image_integrator(
+    timestamps: List[Timestamp], chunk_note: str
 ) -> str:
     """Formats the timestamps and chunk notes for the image integrator prompt. Format is:
 
@@ -235,7 +186,7 @@ def _format_chunk_text_for_image_integrator(
         {timestamps_str}
         </timestamps>
         <notes>
-        {chunk_notes}
+        {chunk_note}
         </notes>
         """
     ).strip()
@@ -247,25 +198,18 @@ async def image_integrator_chunk_agent(
     runtime: Runtime,
 ) -> ImageIntegratorOverallState:
     """Uses LLM to decide where to insert images in the chunk notes based on the timestamps and captions."""
-    file_path = _save_generated_json_objects_path(
+    image_insertions = cache_generated_json(
         video_id=runtime.context["video_id"],
-        chunk_number=state["chunk_id"],
         json_type="image_insertions",
+        chunk_idx=state["chunk_id"],
+        total_chunks=runtime.context.get("total_chunks"),
+        refresh_json=runtime.context.get("refresh_notes", False),
     )
-    if os.path.exists(file_path):
-        logger.info(
-            f"Skipping image insertion generation for chunk {state['chunk_id']} as image insertions already exist at: {file_path}"
-        )
-        existing_data = _read_generated_json_objects(
-            video_id=runtime.context["video_id"],
-            chunk_number=state["chunk_id"],
-            note_type="image_insertions",
-        )
-        if existing_data:
-            state["image_insertions"] = [
-                ImageInsertion(**ii) for ii in existing_data.get("image_insertions", [])
-            ]
-        return state
+    if image_insertions:
+        image_insertions = [
+            ImageInsertion(**ii) for ii in image_insertions.get("image_insertions", [])
+        ]
+        return {"image_insertions": image_insertions}
 
     llm = create_llm_instance(
         provider=runtime.context["provider"],
@@ -274,13 +218,15 @@ async def image_integrator_chunk_agent(
     )
     system_message = SystemMessage(content=IMAGE_INTEGRATOR_SYSTEM_PROMPT)
     human_message = HumanMessage(
-        content=_format_chunk_text_for_image_integrator(
-            state["timestamps"], state["chunk_notes"]
+        content=_format_chunk_for_image_integrator(
+            state["timestamps"], state["chunk_note"]
         )
     )
     response = await llm.ainvoke([system_message, human_message])
-    assert isinstance(response, ImageIntegratorOutput)
-    _save_generated_json_objects(
+    assert isinstance(
+        response, ImageIntegratorOutput
+    ), "LLM response is not of type ImageIntegratorOutput"
+    save_generated_json_objects(
         video_id=runtime.context["video_id"],
         chunk_number=state["chunk_id"],
         data=response.model_dump(),
@@ -365,20 +311,18 @@ async def image_integrator_chunk(
 ) -> ImageIntegratorOverallState:
     "Uses helper methods to extract frames and integrate them into the chunk notes."
     # Step 0: If integrated notes already exist, skip processing
-    file_path = save_intermediate_text_path(
+    image_integrated_notes = cache_intermediate_text(
         video_id=runtime.context["video_id"],
         chunk_number=state["chunk_id"],
         note_type="integrated",
     )
-    if os.path.exists(file_path):
-        logger.info(
-            f"Skipping image integration for chunk {state['chunk_id']} as integrated notes already exist at: {file_path}"
-        )
-        with open(file_path, "r") as file:
-            saved_text = file.read()
-        state["image_integrated_notes"] = saved_text
-        state["inserted_images"] = state.get("inserted_images", [])
-        return state
+
+    if image_integrated_notes:
+        return {
+            "image_integrated_notes": image_integrated_notes,
+            "inserted_images": state.get("inserted_images", []),
+        }
+
     inserted_image = []
     image_extractions = state.get("inserted_images", [])
     for insertion in state["image_insertions"]:
@@ -405,7 +349,7 @@ async def image_integrator_chunk(
             img["frame_path"], runtime.context["video_id"]
         )
     image_integrated_notes = _integrate_images_into_notes(
-        state["chunk_notes"], inserted_image
+        state["chunk_note"], inserted_image
     )
     save_intermediate_text(
         video_id=runtime.context["video_id"],
