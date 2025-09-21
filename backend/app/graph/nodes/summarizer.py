@@ -1,5 +1,4 @@
 import os
-from typing_extensions import TypedDict
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.runtime import Runtime
 
@@ -8,16 +7,12 @@ from .utils import (
     cache_intermediate_text,
     handle_llm_markdown_response,
 )
+from .states import SummarizerState
 from app.services import create_llm_instance
 from app.prompts import SUMMARIZER_SYSTEM_PROMPT
 from app.utils import create_simple_logger
 
 logger = create_simple_logger(__name__)
-
-
-class SummarizerState(TypedDict):
-    collected_notes: str
-    summary: str
 
 
 def save_summary_path(video_id: str) -> str:

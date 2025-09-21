@@ -1,9 +1,7 @@
 import os
 
-from typing_extensions import TypedDict
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.runtime import Runtime
-from typing import Literal
 
 from .utils import (
     notes_dir,
@@ -11,21 +9,12 @@ from .utils import (
     cache_intermediate_text,
     handle_llm_markdown_response,
 )
+from .states import ChunkNotesAgentState, NotesCollectorAgentState
 from app.services import create_llm_instance
 from app.prompts import CHUNK_NOTES_SYSTEM_PROMPT, NOTES_COLLECTOR_SYSTEM_PROMPT
 from app.utils import create_simple_logger
 
 logger = create_simple_logger(__name__)
-
-
-class ChunkNotesAgentState(TypedDict):
-    chunk: str
-    chunk_idx: int | str
-
-
-class NotesCollectorAgentState(TypedDict):
-    formatted_notes: list[str]
-    collected_notes: str
 
 
 def save_final_notes_path(video_id: str) -> str:
@@ -56,7 +45,7 @@ async def chunk_notes_agent(
         refresh_notes=refresh_notes,
     )
     if saved_note:
-        return {"chunk_note": saved_note}
+        return {"chunk_note": saved_note, "chunk_notes": [saved_note]}
 
     llm = create_llm_instance(
         provider=runtime.context["provider"], model=runtime.context["model"]
@@ -72,7 +61,7 @@ async def chunk_notes_agent(
         text=chunk_note,
         note_type="raw",
     )
-    return {"chunk_note": chunk_note}
+    return {"chunk_note": chunk_note, "chunk_notes": [chunk_note]}
 
 
 def convert_list_of_notes_to_xml(notes: list[str]) -> str:
@@ -100,8 +89,7 @@ async def notes_collector_agent(
         refresh_notes=runtime.context.get("refresh_notes", False),
     )
     if collected_notes:
-        state["collected_notes"] = collected_notes
-        return state
+        return {"collected_notes": collected_notes}
 
     llm = create_llm_instance(
         provider=runtime.context["provider"], model=runtime.context["model"]

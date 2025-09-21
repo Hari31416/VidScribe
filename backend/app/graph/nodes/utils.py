@@ -92,23 +92,23 @@ def cache_intermediate_text(
 
 def save_generated_json_objects_path(
     video_id: str,
-    chunk_number: int | str,
+    chunk_idx: int | str,
     json_type: Literal["timestamps", "image_insertions"] = "timestamps",
 ) -> None:
     path = create_path_to_save_notes(video_id)
     path = os.path.join(path, "partial")
     os.makedirs(path, exist_ok=True)
-    file_path = os.path.join(path, f"{json_type}_chunk_{chunk_number}.json")
+    file_path = os.path.join(path, f"{json_type}_chunk_{chunk_idx}.json")
     return file_path
 
 
 def save_generated_json_objects(
     video_id: str,
-    chunk_number: int | str,
+    chunk_idx: int | str,
     data: dict,
     json_type: Literal["timestamps", "image_insertions"] = "timestamps",
 ) -> None:
-    file_path = save_generated_json_objects_path(video_id, chunk_number, json_type)
+    file_path = save_generated_json_objects_path(video_id, chunk_idx, json_type)
 
     with open(file_path, "w") as file:
         json.dump(data, file, indent=4)
@@ -117,12 +117,12 @@ def save_generated_json_objects(
 
 def read_generated_json_objects(
     video_id: str,
-    chunk_number: int | str,
+    chunk_idx: int | str,
     note_type: Literal["timestamps", "image_insertions"] = "timestamps",
 ) -> dict | None:
     path = create_path_to_save_notes(video_id)
     path = os.path.join(path, "partial")
-    file_path = os.path.join(path, f"{note_type}_chunk_{chunk_number}.json")
+    file_path = os.path.join(path, f"{note_type}_chunk_{chunk_idx}.json")
     if not os.path.exists(file_path):
         return None
 
@@ -140,7 +140,7 @@ def cache_generated_json(
     refresh_json: bool = False,
 ):
     file_path = save_generated_json_objects_path(
-        video_id=video_id, chunk_number=chunk_idx, json_type=json_type
+        video_id=video_id, chunk_idx=chunk_idx, json_type=json_type
     )
     if os.path.exists(file_path) and not refresh_json:
         log_msg = (

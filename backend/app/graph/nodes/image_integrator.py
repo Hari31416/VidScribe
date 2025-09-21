@@ -1,12 +1,8 @@
-from typing_extensions import TypedDict, Annotated
 from typing import List
 from textwrap import dedent
-from pydantic import BaseModel
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.runtime import Runtime
-from typing import Literal
 import os
-import json
 
 from app.services import create_llm_instance, extract_frame
 from .utils import (
@@ -16,6 +12,19 @@ from .utils import (
     save_generated_json_objects,
     cache_intermediate_text,
 )
+from .states import (
+    Timestamp,
+    TimestampGeneratorOutput,
+    ImageInsertion,
+    ImageIntegratorOutput,
+    ImageExtraction,
+    ImageIntegratorOverallState,
+    ImageInsertionInput,
+    TimestampGeneratorInput,
+    ImageIntegratorInput,
+    ImageExtractionInput,
+    OverAllState,
+)
 from app.prompts import (
     TIMESTAMP_GENERATOR_SYSTEM_PROMPT,
     IMAGE_INTEGRATOR_SYSTEM_PROMPT,
@@ -23,59 +32,6 @@ from app.prompts import (
 from app.utils import create_simple_logger
 
 logger = create_simple_logger(__name__)
-
-
-class TimestampGeneratorInput(TypedDict):
-    chunk: str
-    chunk_note: str
-    chunk_idx: int = 1
-
-
-class Timestamp(BaseModel):
-    timestamp: Annotated[str, "Timestamp in HH:MM:SS format"]
-    reason: Annotated[str, "Short explanation why this timestamp is important"]
-
-
-class TimestampGeneratorOutput(BaseModel):
-    timestamps: List[Timestamp]
-
-
-class ImageIntegratorInput(TypedDict):
-    timestamps: List[Timestamp]
-    chunk_note: str
-
-
-class ImageInsertion(BaseModel):
-    timestamp: Annotated[str, "Timestamp in HH:MM:SS format"]
-    line_number: Annotated[int, "Line number in the notes to insert the image"]
-    caption: Annotated[str, "a short text caption for the image"]
-
-
-class ImageIntegratorOutput(BaseModel):
-    image_insertions: List[ImageInsertion]
-
-
-class ImageExtraction(TypedDict):
-    timestamp: str
-    frame_path: str
-
-
-# Created using `ImageInsertion` and `ImageExtraction` to map where to insert which extracted frame
-class ImageInsertionInput(TypedDict):
-    timestamp: str
-    line_number: int
-    caption: str
-    frame_path: str
-
-
-class ImageIntegratorOverallState(TypedDict):
-    chunk: str
-    chunk_note: str
-    chunk_idx: int = 1
-    image_insertions: List[ImageInsertion]
-    image_integrated_notes: str
-    timestamps: List[Timestamp]
-    inserted_images: List[ImageInsertionInput]
 
 
 def _convert_image_path_to_relative(image_path: str, video_id: str) -> str:
@@ -111,7 +67,7 @@ def _format_chunk_for_timestamp_generator(chunk: str, chunk_note: str) -> str:
 
 
 async def timestamp_generator_agent(
-    state: ImageIntegratorOverallState,
+    state: TimestampGeneratorInput,
     runtime: Runtime,
 ) -> ImageIntegratorOverallState:
     """Generates timestamps for important moments in the chunk text based on the chunk notes."""
@@ -143,12 +99,11 @@ async def timestamp_generator_agent(
     ), "LLM response is not of type TimestampGeneratorOutput"
     save_generated_json_objects(
         video_id=runtime.context["video_id"],
-        chunk_number=state["chunk_idx"],
+        chunk_idx=state["chunk_idx"],
         data=response.model_dump(),
         json_type="timestamps",
     )
-    state["timestamps"] = response.timestamps
-    return response
+    return {"timestamps": response.timestamps}
 
 
 def _format_chunk_for_image_integrator(
@@ -193,15 +148,15 @@ def _format_chunk_for_image_integrator(
     return formatted_text
 
 
-async def image_integrator_chunk_agent(
-    state: ImageIntegratorOverallState,
+async def image_insertion_generation_agent(
+    state: ImageIntegratorInput,
     runtime: Runtime,
 ) -> ImageIntegratorOverallState:
     """Uses LLM to decide where to insert images in the chunk notes based on the timestamps and captions."""
     image_insertions = cache_generated_json(
         video_id=runtime.context["video_id"],
         json_type="image_insertions",
-        chunk_idx=state["chunk_id"],
+        chunk_idx=state["chunk_idx"],
         total_chunks=runtime.context.get("total_chunks"),
         refresh_json=runtime.context.get("refresh_notes", False),
     )
@@ -228,16 +183,15 @@ async def image_integrator_chunk_agent(
     ), "LLM response is not of type ImageIntegratorOutput"
     save_generated_json_objects(
         video_id=runtime.context["video_id"],
-        chunk_number=state["chunk_id"],
+        chunk_idx=state["chunk_idx"],
         data=response.model_dump(),
         json_type="image_insertions",
     )
-    state["image_insertions"] = response.image_insertions
-    return state
+    return {"image_insertions": response.image_insertions}
 
 
 async def extract_frames(
-    state: ImageIntegratorOverallState,
+    state: ImageExtractionInput,
     runtime: Runtime,
 ) -> ImageIntegratorOverallState:
     """Extracts frames from the video at the specified timestamps and saves them to disk."""
@@ -257,8 +211,7 @@ async def extract_frames(
             )
         except Exception as e:
             logger.error(f"Failed to extract frame at {ts.timestamp}: {e}")
-    state["inserted_images"] = image_extractions
-    return state
+    return {"extracted_images": image_extractions}
 
 
 def _integrate_images_into_notes(
@@ -305,26 +258,29 @@ def _integrate_images_into_notes(
     return image_integrated_notes
 
 
-async def image_integrator_chunk(
+async def image_integrator_agent(
     state: ImageIntegratorOverallState,
     runtime: Runtime,
-) -> ImageIntegratorOverallState:
+) -> OverAllState:
     "Uses helper methods to extract frames and integrate them into the chunk notes."
     # Step 0: If integrated notes already exist, skip processing
     image_integrated_notes = cache_intermediate_text(
         video_id=runtime.context["video_id"],
-        chunk_number=state["chunk_id"],
+        chunk_idx=state["chunk_idx"],
         note_type="integrated",
+        refresh_notes=runtime.context.get("refresh_notes", False),
     )
 
     if image_integrated_notes:
         return {
-            "image_integrated_notes": image_integrated_notes,
-            "inserted_images": state.get("inserted_images", []),
+            "chunk_notes": [state["chunk_note"]],
+            "image_integrated_notes": [image_integrated_notes],
+            "integrates": [state],
+            "image_integrated_note": image_integrated_notes,
         }
 
     inserted_image = []
-    image_extractions = state.get("inserted_images", [])
+    image_extractions = state.get("extracted_images", [])
     for insertion in state["image_insertions"]:
         matching_extraction = next(
             (ie for ie in image_extractions if ie["timestamp"] == insertion.timestamp),
@@ -353,12 +309,14 @@ async def image_integrator_chunk(
     )
     save_intermediate_text(
         video_id=runtime.context["video_id"],
-        chunk_number=state["chunk_id"],
+        chunk_idx=state["chunk_idx"],
         text=image_integrated_notes,
         note_type="integrated",
     )
     logger.info("Integrated images into chunk notes.")
-    state["image_integrated_notes"] = image_integrated_notes
-    state["inserted_images"] = inserted_image
-
-    return state
+    return {
+        "chunk_notes": [state["chunk_note"]],
+        "image_integrated_notes": [image_integrated_notes],
+        "integrates": [state],
+        "image_integrated_note": image_integrated_notes,
+    }
