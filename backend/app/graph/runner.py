@@ -12,6 +12,8 @@ class ProgressEvent(TypedDict, total=False):
     progress: int  # 0-100
     message: str
     data: Dict[str, Any]
+    counters: Dict[str, Any]
+    stream: Dict[str, Any]
 
 
 class StreamConfig(TypedDict, total=False):
@@ -32,7 +34,11 @@ def _empty_overall_state() -> OverAllState:
         image_integrated_notes=[],
         formatted_notes=[],
         collected_notes="",
+        integrates=[],
         summary="",
+        timestamps_output=[],
+        image_insertions_output=[],
+        extracted_images_output=[],
     )
 
 
@@ -96,6 +102,10 @@ STATE_KEYS = {
     "formatted_notes",
     "collected_notes",
     "summary",
+    "timestamps_output",
+    "image_insertions_output",
+    "extracted_images_output",
+    "integrates",
 }
 
 
@@ -160,9 +170,20 @@ def _shape_data_for_stream(
             if isinstance(max_chars, int) and max_chars >= 0:
                 shaped_items: List[Any] = []
                 for item in sliced:
-                    shaped_items.append(
-                        item[:max_chars] if isinstance(item, str) else item
-                    )
+                    if isinstance(item, str):
+                        shaped_items.append(item[:max_chars])
+                    elif isinstance(item, list):
+                        # For nested lists (e.g., timestamps_output), shape inner strings if any
+                        inner: List[Any] = []
+                        for inner_item in item:
+                            inner.append(
+                                inner_item[:max_chars]
+                                if isinstance(inner_item, str)
+                                else inner_item
+                            )
+                        shaped_items.append(inner)
+                    else:
+                        shaped_items.append(item)
                 out[key] = shaped_items
             else:
                 out[key] = sliced
@@ -177,6 +198,79 @@ def _shape_data_for_stream(
             out[key] = val
 
     return out
+
+
+def _compute_counters(state: OverAllState, expected_chunks: int) -> Dict[str, Any]:
+    """Compute progress counters for UI display.
+
+    Returns a nested dict with current vs total for key artifacts.
+    """
+
+    def _safe_len(x: Any) -> int:
+        try:
+            return len(x)  # type: ignore[arg-type]
+        except Exception:
+            return 0
+
+    # Notes
+    chunk_notes = state.get("chunk_notes") or []
+    image_integrated_notes = state.get("image_integrated_notes") or []
+    formatted_notes = state.get("formatted_notes") or []
+    collected_notes = state.get("collected_notes") or ""
+    summary = state.get("summary") or ""
+
+    # Multi-output debug fields are lists of lists
+    timestamps_output = state.get("timestamps_output") or []
+    image_insertions_output = state.get("image_insertions_output") or []
+    extracted_images_output = state.get("extracted_images_output") or []
+
+    # Totals across items (flatten)
+    total_timestamps = sum(_safe_len(lst) for lst in timestamps_output)
+    total_image_insertions = sum(_safe_len(lst) for lst in image_insertions_output)
+    total_extracted_images = sum(_safe_len(lst) for lst in extracted_images_output)
+
+    counters = {
+        "expected_chunks": max(int(expected_chunks), 0),
+        "notes_created": {
+            "current": _safe_len(chunk_notes),
+            "total": max(int(expected_chunks), 0),
+        },
+        "timestamps_created": {
+            "current_items": total_timestamps,
+            "chunks_completed": _safe_len(timestamps_output),
+            "total_chunks": max(int(expected_chunks), 0),
+        },
+        "image_insertions_created": {
+            "current_items": total_image_insertions,
+            "chunks_completed": _safe_len(image_insertions_output),
+            "total_chunks": max(int(expected_chunks), 0),
+        },
+        "extracted_images_created": {
+            "current_items": total_extracted_images,
+            "chunks_completed": _safe_len(extracted_images_output),
+            "total_chunks": max(int(expected_chunks), 0),
+        },
+        "integrated_image_notes_created": {
+            "current": _safe_len(image_integrated_notes),
+            "total": max(int(expected_chunks), 0),
+        },
+        "formatted_notes_created": {
+            "current": _safe_len(formatted_notes),
+            "total": max(int(expected_chunks), 0),
+        },
+        "finalization": {
+            "collected": bool(collected_notes),
+            "summary": bool(summary),
+        },
+        "notes_by_type": {
+            "raw": _safe_len(chunk_notes),
+            "integrated": _safe_len(image_integrated_notes),
+            "formatted": _safe_len(formatted_notes),
+            "collected": 1 if collected_notes else 0,
+            "summary": 1 if summary else 0,
+        },
+    }
+    return counters
 
 
 async def stream_run_graph(
@@ -232,13 +326,24 @@ async def stream_run_graph(
                 "formatted_notes": [],
                 "collected_notes": "",
                 "summary": "",
+                "timestamps_output": [],
+                "image_insertions_output": [],
+                "extracted_images_output": [],
+                "integrates": [],
             },
             stream_config,
         ),
+        "counters": _compute_counters(state, int(num_chunks)),
     }
 
     try:
-        async for new_state in graph.astream(input=state, context=runtime):
+        # Iterate over both values and updates in the stream
+        async for item in graph.astream(
+            input=state,
+            context=runtime,
+            subgraphs=True,
+            stream_mode=["values", "updates"],
+        ):
             # Check for cancellation between steps
             if cancel_event and cancel_event.is_set():
                 yield {
@@ -248,8 +353,21 @@ async def stream_run_graph(
                     "data": {},
                 }
                 return
+
+            # Unpack stream item to determine mode and payload
+            mode: Optional[str] = None
+            payload: Any = item
+            if isinstance(item, tuple) and len(item) >= 3:
+                # Common astream tuple shape: (node, mode, payload)
+                mode = item[1]
+                payload = item[2]
+            elif isinstance(item, dict):
+                # Fallback: direct dict payload (older versions)
+                mode = None
+                payload = item
+
             # Merge: be resilient to different shapes by scanning for known keys
-            _update_state_from_obj(new_state, state)
+            _update_state_from_obj(payload, state)
 
             progress, phase = _compute_progress(state, int(num_chunks))
 
@@ -268,6 +386,11 @@ async def stream_run_graph(
                 "progress": progress,
                 "message": message_map.get(phase, "Working…"),
                 "data": _shape_data_for_stream(state, stream_config),
+                "counters": _compute_counters(state, int(num_chunks)),
+                "stream": {
+                    "mode": mode or "values",
+                    "update": payload if mode == "updates" else None,
+                },
             }
 
         # Done
@@ -276,6 +399,7 @@ async def stream_run_graph(
             "progress": 100,
             "message": "Graph execution completed",
             "data": _shape_data_for_stream(state, stream_config),
+            "counters": _compute_counters(state, int(num_chunks)),
         }
     except asyncio.CancelledError:
         yield {
