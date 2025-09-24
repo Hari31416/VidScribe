@@ -1,4 +1,5 @@
 import asyncio
+import json
 import gradio as gr
 from app.graph import stream_run_graph
 from app.utils import create_simple_logger
@@ -51,6 +52,113 @@ async def run_graph(
         stream_config = _make_stream_config(
             compact_mode, include_fields, max_items, max_chars
         )
+
+        def _format_counters_md(
+            counters: dict | None, overall_progress: int | None = None
+        ) -> str:
+            if not counters:
+                return ""
+            try:
+                exp_chunks = int(counters.get("expected_chunks", 0) or 0)
+                notes = counters.get("notes_created", {}) or {}
+                integ = counters.get("integrated_image_notes_created", {}) or {}
+                fmt = counters.get("formatted_notes_created", {}) or {}
+                tss = counters.get("timestamps_created", {}) or {}
+                ins = counters.get("image_insertions_created", {}) or {}
+                ext = counters.get("extracted_images_created", {}) or {}
+                fin = counters.get("finalization", {}) or {}
+
+                def _pct(cur: int, tot: int) -> int:
+                    tot = max(int(tot or 0), 1)
+                    cur = max(int(cur or 0), 0)
+                    return max(0, min(100, int(round((cur / tot) * 100))))
+
+                def _bar(cur: int, tot: int, width: int = 18) -> str:
+                    p = _pct(cur, tot)
+                    filled = int(round((p / 100) * width))
+                    return f"[{('█' * filled) + ('░' * (width - filled))}] {p}%"
+
+                # Chunk-based stages
+                raw_c, raw_t = int(notes.get("current", 0) or 0), int(
+                    notes.get("total", exp_chunks) or exp_chunks
+                )
+                int_c, int_t = int(integ.get("current", 0) or 0), int(
+                    integ.get("total", exp_chunks) or exp_chunks
+                )
+                fmt_c, fmt_t = int(fmt.get("current", 0) or 0), int(
+                    fmt.get("total", exp_chunks) or exp_chunks
+                )
+
+                # Item-based metrics
+                tss_items = int(tss.get("current_items", 0) or 0)
+                tss_chunks_c = int(tss.get("chunks_completed", 0) or 0)
+                tss_chunks_t = int(tss.get("total_chunks", exp_chunks) or exp_chunks)
+
+                ins_items = int(ins.get("current_items", 0) or 0)
+                ins_chunks_c = int(ins.get("chunks_completed", 0) or 0)
+                ins_chunks_t = int(ins.get("total_chunks", exp_chunks) or exp_chunks)
+
+                ext_items = int(ext.get("current_items", 0) or 0)
+                ext_chunks_c = int(ext.get("chunks_completed", 0) or 0)
+                ext_chunks_t = int(ext.get("total_chunks", exp_chunks) or exp_chunks)
+
+                collected = bool(fin.get("collected", False))
+                summary = bool(fin.get("summary", False))
+
+                # Build Markdown
+                md: list[str] = []
+                # Overall progress (from event)
+                if overall_progress is not None:
+                    p = max(0, min(100, int(overall_progress)))
+                    filled = int(round((p / 100) * 24))
+                    md.append("### Overall")
+                    md.append(f"[{('█' * filled) + ('░' * (24 - filled))}] {p}%")
+                    md.append("")
+                md.append("### Progress")
+                md.append("")
+                md.append("| Stage | Count | Progress |")
+                md.append("| --- | ---: | :--- |")
+                md.append(f"| Raw notes | {raw_c}/{raw_t} | {_bar(raw_c, raw_t)} |")
+                md.append(
+                    f"| Integrated notes | {int_c}/{int_t} | {_bar(int_c, int_t)} |"
+                )
+                md.append(
+                    f"| Formatted notes | {fmt_c}/{fmt_t} | {_bar(fmt_c, fmt_t)} |"
+                )
+
+                md.append("")
+                md.append("### Media and timestamps")
+                md.append("")
+                md.append("| Metric | Items | Chunks | Progress |")
+                md.append("| --- | ---: | ---: | :--- |")
+                md.append(
+                    f"| Timestamps | {tss_items} | {tss_chunks_c}/{tss_chunks_t} | {_bar(tss_chunks_c, tss_chunks_t)} |"
+                )
+                md.append(
+                    f"| Image insertions | {ins_items} | {ins_chunks_c}/{ins_chunks_t} | {_bar(ins_chunks_c, ins_chunks_t)} |"
+                )
+                md.append(
+                    f"| Extracted images | {ext_items} | {ext_chunks_c}/{ext_chunks_t} | {_bar(ext_chunks_c, ext_chunks_t)} |"
+                )
+
+                md.append("")
+                md.append("### Finalization")
+                md.append(
+                    f"Collected: {'✅' if collected else '❌'} · Summary: {'✅' if summary else '❌'}"
+                )
+                return "\n".join(md)
+            except Exception:
+                # Fallback to raw JSON if structure changes
+                return json.dumps(counters, indent=2)
+
+        def _format_stream_mode_md(stream_info: dict | None) -> str:
+            mode = (stream_info or {}).get("mode")
+            if mode == "updates":
+                return "🟢 **Stream:** updates · per-node delta"
+            if mode == "values":
+                return "🔵 **Stream:** values · cumulative snapshot"
+            return "⚪ **Stream:** —"
+
         async for event in stream_run_graph(
             video_id=video_id,
             video_path=video_path,
@@ -63,7 +171,10 @@ async def run_graph(
             refresh_notes=refresh_notes,
         ):
             data = event.get("data", {})
+            counters = event.get("counters", {})
+            stream_info = event.get("stream", {})
             progress_text = event.get("message", "Working…")
+            progress_num = int(event.get("progress", 0) or 0)
             if event.get("phase") == "cancelled":
                 yield (
                     "Cancelled by user",
@@ -73,6 +184,8 @@ async def run_graph(
                     "\n\n".join(data.get("formatted_notes", []) or []),
                     data.get("collected_notes", ""),
                     data.get("summary", ""),
+                    _format_counters_md(counters, progress_num),
+                    _format_stream_mode_md(stream_info),
                 )
                 _CANCEL_EVENT = None
                 return
@@ -84,12 +197,14 @@ async def run_graph(
                 "\n\n".join(data.get("formatted_notes", []) or []),
                 data.get("collected_notes", ""),
                 data.get("summary", ""),
+                _format_counters_md(counters, progress_num),
+                _format_stream_mode_md(stream_info),
             )
         _CANCEL_EVENT = None
     except Exception as e:
         logger.error(f"Error running graph: {str(e)}", exc_info=True)
         error_msg = f"Error: {str(e)}"
-        yield (error_msg, "", "", "", "", "", "")
+        yield (error_msg, "", "", "", "", "", "", "", "")
 
 
 def cancel_run():
@@ -161,7 +276,9 @@ with gr.Blocks() as demo:
         refresh_notes = gr.Checkbox(label="Refresh Notes", value=True)
     with gr.Row():
         provider = gr.Dropdown(
-            label="Provider", choices=["google", "openai"], value="google"
+            label="Provider",
+            choices=["google", "openai", "openrouter"],
+            value="google",
         )
         model = gr.Textbox(label="Model", value="gemini-2.0-flash")
 
@@ -169,6 +286,8 @@ with gr.Blocks() as demo:
     cancel_btn = gr.Button("Cancel")
 
     progress_output = gr.Textbox(label="Progress", value="Ready to run")
+    stats_output = gr.Markdown(value="", elem_id="stats")
+    stream_mode_output = gr.Markdown(value="", elem_id="stream_mode")
     # Initial visibility matches default compact settings: formatted_notes + summary only
     chunks_output = gr.Textbox(label="Chunks", lines=5, visible=False)
     notes_output = gr.Textbox(label="Chunk Notes", lines=10, visible=False)
@@ -201,6 +320,8 @@ with gr.Blocks() as demo:
             formatted_output,
             collected_output,
             summary_output,
+            stats_output,
+            stream_mode_output,
         ],
     )
 
