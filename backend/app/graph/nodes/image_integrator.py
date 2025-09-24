@@ -1,4 +1,6 @@
 from typing import List
+import json
+import re
 from textwrap import dedent
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.runtime import Runtime
@@ -66,6 +68,37 @@ def _format_chunk_for_timestamp_generator(chunk: str, chunk_note: str) -> str:
     return formatted_text
 
 
+def _extract_json_from_text(text: str) -> dict | None:
+    """Try to extract a JSON object from an LLM text response.
+
+    - Prefer fenced code blocks ```json ... ```
+    - Fallback to first {...} block in the text
+    """
+    if not text:
+        return None
+    # Code fence
+    fence = re.search(r"```json\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE)
+    if fence:
+        try:
+            return json.loads(fence.group(1))
+        except Exception:
+            pass
+    # Any JSON object
+    brace = re.search(r"\{[\s\S]*\}$", text.strip())
+    if brace:
+        try:
+            return json.loads(brace.group(0))
+        except Exception:
+            pass
+    # Try to find the first and last brace
+    try:
+        start = text.index("{")
+        end = text.rindex("}") + 1
+        return json.loads(text[start:end])
+    except Exception:
+        return None
+
+
 async def timestamp_generator_agent(
     state: TimestampGeneratorInput,
     runtime: Runtime,
@@ -82,31 +115,65 @@ async def timestamp_generator_agent(
         timestamps = [Timestamp(**ts) for ts in timestamps.get("timestamps", [])]
         return {"timestamps": timestamps, "timestamps_output": [timestamps]}
 
-    llm = create_llm_instance(
-        provider=runtime.context["provider"],
-        model=runtime.context["model"],
-        response_format=TimestampGeneratorOutput,
-    )
     system_message = SystemMessage(content=TIMESTAMP_GENERATOR_SYSTEM_PROMPT)
     human_message = HumanMessage(
         content=_format_chunk_for_timestamp_generator(
             state["chunk"], state["chunk_note"]
         )
     )
-    response = await llm.ainvoke([system_message, human_message])
-    assert isinstance(
-        response, TimestampGeneratorOutput
-    ), "LLM response is not of type TimestampGeneratorOutput"
-    save_generated_json_objects(
-        video_id=runtime.context["video_id"],
-        chunk_idx=state["chunk_idx"],
-        data=response.model_dump(),
-        json_type="timestamps",
-    )
-    return {
-        "timestamps": response.timestamps,
-        "timestamps_output": [response.timestamps],
-    }
+
+    # Try structured output first
+    try:
+        llm = create_llm_instance(
+            provider=runtime.context["provider"],
+            model=runtime.context["model"],
+            response_format=TimestampGeneratorOutput,
+        )
+        response = await llm.ainvoke([system_message, human_message])
+        assert isinstance(
+            response, TimestampGeneratorOutput
+        ), "LLM response is not of type TimestampGeneratorOutput"
+        save_generated_json_objects(
+            video_id=runtime.context["video_id"],
+            chunk_idx=state["chunk_idx"],
+            data=response.model_dump(),
+            json_type="timestamps",
+        )
+        return {
+            "timestamps": response.timestamps,
+            "timestamps_output": [response.timestamps],
+        }
+    except Exception as e:
+        logger.warning(
+            f"Structured output failed for timestamp_generator_agent, falling back to JSON parsing: {e}"
+        )
+        # Unstructured fallback
+        llm = create_llm_instance(
+            provider=runtime.context["provider"], model=runtime.context["model"]
+        )
+        # Nudge model to return clean JSON
+        fallback_system = SystemMessage(
+            content=TIMESTAMP_GENERATOR_SYSTEM_PROMPT
+            + '\nReturn ONLY valid JSON with the shape {"timestamps":[{"timestamp":"HH:MM:SS","reason":"..."}]}'
+        )
+        res = await llm.ainvoke([fallback_system, human_message])
+        text = getattr(res, "content", str(res))
+        data = _extract_json_from_text(text) or {}
+        try:
+            parsed = TimestampGeneratorOutput(**data)
+        except Exception:
+            logger.error("Failed to parse timestamps JSON; returning empty list")
+            parsed = TimestampGeneratorOutput(timestamps=[])
+        save_generated_json_objects(
+            video_id=runtime.context["video_id"],
+            chunk_idx=state["chunk_idx"],
+            data=parsed.model_dump(),
+            json_type="timestamps",
+        )
+        return {
+            "timestamps": parsed.timestamps,
+            "timestamps_output": [parsed.timestamps],
+        }
 
 
 def _format_chunk_for_image_integrator(
@@ -172,31 +239,64 @@ async def image_insertion_generation_agent(
             "image_insertions_output": [image_insertions],
         }
 
-    llm = create_llm_instance(
-        provider=runtime.context["provider"],
-        model=runtime.context["model"],
-        response_format=ImageIntegratorOutput,
-    )
     system_message = SystemMessage(content=IMAGE_INTEGRATOR_SYSTEM_PROMPT)
     human_message = HumanMessage(
         content=_format_chunk_for_image_integrator(
             state["timestamps"], state["chunk_note"]
         )
     )
-    response = await llm.ainvoke([system_message, human_message])
-    assert isinstance(
-        response, ImageIntegratorOutput
-    ), "LLM response is not of type ImageIntegratorOutput"
-    save_generated_json_objects(
-        video_id=runtime.context["video_id"],
-        chunk_idx=state["chunk_idx"],
-        data=response.model_dump(),
-        json_type="image_insertions",
-    )
-    return {
-        "image_insertions": response.image_insertions,
-        "image_insertions_output": [response.image_insertions],
-    }
+
+    # Try structured output first
+    try:
+        llm = create_llm_instance(
+            provider=runtime.context["provider"],
+            model=runtime.context["model"],
+            response_format=ImageIntegratorOutput,
+        )
+        response = await llm.ainvoke([system_message, human_message])
+        assert isinstance(
+            response, ImageIntegratorOutput
+        ), "LLM response is not of type ImageIntegratorOutput"
+        save_generated_json_objects(
+            video_id=runtime.context["video_id"],
+            chunk_idx=state["chunk_idx"],
+            data=response.model_dump(),
+            json_type="image_insertions",
+        )
+        return {
+            "image_insertions": response.image_insertions,
+            "image_insertions_output": [response.image_insertions],
+        }
+    except Exception as e:
+        logger.warning(
+            f"Structured output failed for image_insertion_generation_agent, falling back to JSON parsing: {e}"
+        )
+        # Unstructured fallback
+        llm = create_llm_instance(
+            provider=runtime.context["provider"], model=runtime.context["model"]
+        )
+        fallback_system = SystemMessage(
+            content=IMAGE_INTEGRATOR_SYSTEM_PROMPT
+            + '\nReturn ONLY valid JSON with the shape {"image_insertions":[{"timestamp":"HH:MM:SS","line_number":0,"caption":"..."}]}'
+        )
+        res = await llm.ainvoke([fallback_system, human_message])
+        text = getattr(res, "content", str(res))
+        data = _extract_json_from_text(text) or {}
+        try:
+            parsed = ImageIntegratorOutput(**data)
+        except Exception:
+            logger.error("Failed to parse image insertions JSON; returning empty list")
+            parsed = ImageIntegratorOutput(image_insertions=[])
+        save_generated_json_objects(
+            video_id=runtime.context["video_id"],
+            chunk_idx=state["chunk_idx"],
+            data=parsed.model_dump(),
+            json_type="image_insertions",
+        )
+        return {
+            "image_insertions": parsed.image_insertions,
+            "image_insertions_output": [parsed.image_insertions],
+        }
 
 
 async def extract_frames(
