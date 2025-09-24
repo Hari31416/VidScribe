@@ -115,6 +115,10 @@ class OverAllState(TypedDict):
     collected_notes: str
     integrates: Annotated[List[ImageIntegratorOverallState], operator.add]
     summary: str
+    timestamps_output: Annotated[List[List[Timestamp]], operator.add]
+    image_insertions_output: Annotated[List[List[ImageInsertion]], operator.add]
+    extracted_images_output: Annotated[List[List[ImageExtraction]], operator.add]
+    # last three are for debugging and progress tracking
 
 
 class TranscriptAndChunkingSubgraphState(TypedDict):

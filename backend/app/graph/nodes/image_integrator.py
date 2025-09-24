@@ -80,7 +80,7 @@ async def timestamp_generator_agent(
     )
     if timestamps:
         timestamps = [Timestamp(**ts) for ts in timestamps.get("timestamps", [])]
-        return {"timestamps": timestamps}
+        return {"timestamps": timestamps, "timestamps_output": [timestamps]}
 
     llm = create_llm_instance(
         provider=runtime.context["provider"],
@@ -103,7 +103,10 @@ async def timestamp_generator_agent(
         data=response.model_dump(),
         json_type="timestamps",
     )
-    return {"timestamps": response.timestamps}
+    return {
+        "timestamps": response.timestamps,
+        "timestamps_output": [response.timestamps],
+    }
 
 
 def _format_chunk_for_image_integrator(
@@ -164,7 +167,10 @@ async def image_insertion_generation_agent(
         image_insertions = [
             ImageInsertion(**ii) for ii in image_insertions.get("image_insertions", [])
         ]
-        return {"image_insertions": image_insertions}
+        return {
+            "image_insertions": image_insertions,
+            "image_insertions_output": [image_insertions],
+        }
 
     llm = create_llm_instance(
         provider=runtime.context["provider"],
@@ -187,7 +193,10 @@ async def image_insertion_generation_agent(
         data=response.model_dump(),
         json_type="image_insertions",
     )
-    return {"image_insertions": response.image_insertions}
+    return {
+        "image_insertions": response.image_insertions,
+        "image_insertions_output": [response.image_insertions],
+    }
 
 
 async def extract_frames(
@@ -211,7 +220,10 @@ async def extract_frames(
             )
         except Exception as e:
             logger.error(f"Failed to extract frame at {ts.timestamp}: {e}")
-    return {"extracted_images": image_extractions}
+    return {
+        "extracted_images": image_extractions,
+        "extracted_images_output": [image_extractions],
+    }
 
 
 def _integrate_images_into_notes(
