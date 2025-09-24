@@ -30,7 +30,11 @@ class StreamConfigModel(BaseModel):
     include_data: bool = True
     include_fields: Optional[List[str]] = Field(
         default=None,
-        description="Subset of ['chunks','chunk_notes','image_integrated_notes','formatted_notes','collected_notes','summary']",
+        description=(
+            "Subset of data fields to include. Valid keys: "
+            "['chunks','chunk_notes','image_integrated_notes','formatted_notes','collected_notes','summary',"
+            " 'timestamps_output','image_insertions_output','extracted_images_output','integrates']"
+        ),
     )
     max_items_per_field: Optional[int] = None
     max_chars_per_field: Optional[int] = None
@@ -62,8 +66,10 @@ async def run_stream(req: RunRequest):
     """Stream live progress as Server-Sent Events (SSE).
 
     Content-Type: text/event-stream
-    Each event has shape: { phase, progress, message, data } where data may contain
-    keys: chunks, chunk_notes, image_integrated_notes, formatted_notes, collected_notes, summary
+    Each event has shape: { phase, progress, message, data, counters, stream }
+    - data: subset of state fields based on stream_config.include_fields
+    - counters: derived metrics (notes/timestamps/image insertions/extracted images/integrated notes)
+    - stream: { mode: 'values'|'updates', update?: object }
     """
 
     async def gen() -> AsyncGenerator[str, None]:
@@ -100,7 +106,10 @@ async def run_stream(req: RunRequest):
 
 @app.post("/run/final")
 async def run_final(req: RunRequest):
-    """Run the pipeline and return only the final result as JSON."""
+    """Run the pipeline and return only the final result as JSON.
+
+    Response shape mirrors one event: { phase, progress, message, data, counters }
+    """
     last_event: Optional[Dict[str, Any]] = None
     try:
         sc = req.stream_config.model_dump() if req.stream_config else {}
@@ -132,6 +141,7 @@ async def run_final(req: RunRequest):
                 "progress": last_event.get("progress", 0),
                 "message": last_event.get("message", ""),
                 "data": last_event.get("data", {}),
+                "counters": last_event.get("counters", {}),
             },
         )
 
@@ -140,6 +150,7 @@ async def run_final(req: RunRequest):
         "progress": last_event.get("progress"),
         "message": last_event.get("message"),
         "data": last_event.get("data", {}),
+        "counters": last_event.get("counters", {}),
     }
 
 
