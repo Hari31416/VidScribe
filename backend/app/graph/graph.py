@@ -23,6 +23,7 @@ from app.graph.nodes.image_integrator import (
 )
 from app.graph.nodes.formatter import formatter_agent
 from app.graph.nodes.summarizer import summarizer_agent
+from app.graph.nodes.exporter import exporter_agent
 from app.utils import create_simple_logger
 
 logger = create_simple_logger(__name__)
@@ -113,6 +114,7 @@ def create_graph(show_graph: bool = True, **kwargs) -> CompiledStateGraph:
     builder.add_node("formatter_agent", formatter_agent)
     builder.add_node("notes_collector_agent", notes_collector_agent)
     builder.add_node("summarizer_agent", summarizer_agent)
+    builder.add_node("exporter_agent", exporter_agent)
 
     builder.add_edge(START, "create_transcript_chunks")
     builder.add_conditional_edges(
@@ -123,8 +125,8 @@ def create_graph(show_graph: bool = True, **kwargs) -> CompiledStateGraph:
 
     builder.add_edge("notes_and_image_integration_subgraph", "notes_collector_agent")
     builder.add_edge("notes_collector_agent", "summarizer_agent")
-
-    builder.add_edge("summarizer_agent", END)
+    builder.add_edge("summarizer_agent", "exporter_agent")
+    builder.add_edge("exporter_agent", END)
 
     graph = builder.compile(**kwargs)
     if not show_graph:

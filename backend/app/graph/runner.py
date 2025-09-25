@@ -106,6 +106,8 @@ STATE_KEYS = {
     "image_insertions_output",
     "extracted_images_output",
     "integrates",
+    "collected_notes_pdf_path",
+    "summary_pdf_path",
 }
 
 
@@ -218,6 +220,8 @@ def _compute_counters(state: OverAllState, expected_chunks: int) -> Dict[str, An
     formatted_notes = state.get("formatted_notes") or []
     collected_notes = state.get("collected_notes") or ""
     summary = state.get("summary") or ""
+    collected_notes_pdf_path = state.get("collected_notes_pdf_path") or ""
+    summary_pdf_path = state.get("summary_pdf_path") or ""
 
     # Multi-output debug fields are lists of lists
     timestamps_output = state.get("timestamps_output") or []
@@ -261,6 +265,8 @@ def _compute_counters(state: OverAllState, expected_chunks: int) -> Dict[str, An
         "finalization": {
             "collected": bool(collected_notes),
             "summary": bool(summary),
+            "collected_notes_pdf": bool(collected_notes_pdf_path),
+            "summary_pdf": bool(summary_pdf_path),
         },
         "notes_by_type": {
             "raw": _safe_len(chunk_notes),
@@ -268,6 +274,9 @@ def _compute_counters(state: OverAllState, expected_chunks: int) -> Dict[str, An
             "formatted": _safe_len(formatted_notes),
             "collected": 1 if collected_notes else 0,
             "summary": 1 if summary else 0,
+            "exported_pdfs": sum(
+                1 for path in [collected_notes_pdf_path, summary_pdf_path] if path
+            ),
         },
     }
     return counters
@@ -330,6 +339,8 @@ async def stream_run_graph(
                 "image_insertions_output": [],
                 "extracted_images_output": [],
                 "integrates": [],
+                "collected_notes_pdf_path": "",
+                "summary_pdf_path": "",
             },
             stream_config,
         ),
@@ -379,6 +390,7 @@ async def stream_run_graph(
                 "format_docs": "Notes formatted",
                 "collect_notes": "Notes collected",
                 "summary": "Summary generated",
+                "collected_notes_pdf_path": "Notes exported to PDF",
             }
 
             yield {
