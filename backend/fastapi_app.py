@@ -5,6 +5,7 @@ from typing import AsyncGenerator, Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from app.graph import stream_run_graph
@@ -58,7 +59,8 @@ async def root() -> Dict[str, str]:
 
 def _to_sse(event: Dict[str, Any]) -> str:
     """Format a dict as SSE message with type 'progress'."""
-    return f"event: progress\n" f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    payload = jsonable_encoder(event)
+    return f"event: progress\n" f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _ensure_pdf_fields(sc: Dict[str, Any]) -> Dict[str, Any]:
