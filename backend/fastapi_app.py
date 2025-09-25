@@ -33,7 +33,7 @@ class StreamConfigModel(BaseModel):
         description=(
             "Subset of data fields to include. Valid keys: "
             "['chunks','chunk_notes','image_integrated_notes','formatted_notes','collected_notes','summary',"
-            " 'timestamps_output','image_insertions_output','extracted_images_output','integrates']"
+            " 'collected_notes_pdf_path','summary_pdf_path','timestamps_output','image_insertions_output','extracted_images_output','integrates']"
         ),
     )
     max_items_per_field: Optional[int] = None
@@ -61,6 +61,15 @@ def _to_sse(event: Dict[str, Any]) -> str:
     return f"event: progress\n" f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
+def _ensure_pdf_fields(sc: Dict[str, Any]) -> Dict[str, Any]:
+    include_fields = sc.get("include_fields")
+    if isinstance(include_fields, list):
+        for pdf_field in ("collected_notes_pdf_path", "summary_pdf_path"):
+            if pdf_field not in include_fields:
+                include_fields.append(pdf_field)
+    return sc
+
+
 @app.post("/run/stream")
 async def run_stream(req: RunRequest):
     """Stream live progress as Server-Sent Events (SSE).
@@ -76,7 +85,11 @@ async def run_stream(req: RunRequest):
         cancel_event = asyncio.Event()
         try:
             # Build a plain dict stream_config and drop None values to avoid None lists
-            sc = req.stream_config.model_dump() if req.stream_config else {}
+            sc = (
+                _ensure_pdf_fields(req.stream_config.model_dump())
+                if req.stream_config
+                else {}
+            )
             async for event in stream_run_graph(
                 video_id=req.video_id,
                 video_path=req.video_path,
@@ -112,7 +125,11 @@ async def run_final(req: RunRequest):
     """
     last_event: Optional[Dict[str, Any]] = None
     try:
-        sc = req.stream_config.model_dump() if req.stream_config else {}
+        sc = (
+            _ensure_pdf_fields(req.stream_config.model_dump())
+            if req.stream_config
+            else {}
+        )
         async for event in stream_run_graph(
             video_id=req.video_id,
             video_path=req.video_path,

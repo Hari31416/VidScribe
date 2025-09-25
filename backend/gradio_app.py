@@ -16,7 +16,11 @@ def _make_stream_config(compact_mode: bool, include_fields, max_items, max_chars
     cfg = {"include_data": True}
     # include_fields comes from a CheckboxGroup (list[str] or None)
     if include_fields:
-        cfg["include_fields"] = include_fields
+        expanded_fields = list(include_fields)
+        for pdf_field in ("collected_notes_pdf_path", "summary_pdf_path"):
+            if pdf_field not in expanded_fields:
+                expanded_fields.append(pdf_field)
+        cfg["include_fields"] = expanded_fields
     if max_items is not None:
         try:
             mi = int(max_items)
@@ -104,6 +108,8 @@ async def run_graph(
 
                 collected = bool(fin.get("collected", False))
                 summary = bool(fin.get("summary", False))
+                collected_pdf = bool(fin.get("collected_notes_pdf", False))
+                summary_pdf = bool(fin.get("summary_pdf", False))
 
                 # Build Markdown
                 md: list[str] = []
@@ -143,9 +149,15 @@ async def run_graph(
 
                 md.append("")
                 md.append("### Finalization")
+                md.append("")
+                md.append("| Artifact | Status |")
+                md.append("| --- | :---: |")
+                md.append(f"| Collected notes | {'✅' if collected else '❌'} |")
+                md.append(f"| Summary | {'✅' if summary else '❌'} |")
                 md.append(
-                    f"Collected: {'✅' if collected else '❌'} · Summary: {'✅' if summary else '❌'}"
+                    f"| Collected notes PDF | {'✅' if collected_pdf else '❌'} |"
                 )
+                md.append(f"| Summary PDF | {'✅' if summary_pdf else '❌'} |")
                 return "\n".join(md)
             except Exception:
                 # Fallback to raw JSON if structure changes
@@ -175,6 +187,8 @@ async def run_graph(
             stream_info = event.get("stream", {})
             progress_text = event.get("message", "Working…")
             progress_num = int(event.get("progress", 0) or 0)
+            collected_pdf_path = data.get("collected_notes_pdf_path")
+            summary_pdf_path = data.get("summary_pdf_path")
             if event.get("phase") == "cancelled":
                 yield (
                     "Cancelled by user",
@@ -186,6 +200,8 @@ async def run_graph(
                     data.get("summary", ""),
                     _format_counters_md(counters, progress_num),
                     _format_stream_mode_md(stream_info),
+                    collected_pdf_path or None,
+                    summary_pdf_path or None,
                 )
                 _CANCEL_EVENT = None
                 return
@@ -199,12 +215,14 @@ async def run_graph(
                 data.get("summary", ""),
                 _format_counters_md(counters, progress_num),
                 _format_stream_mode_md(stream_info),
+                collected_pdf_path or None,
+                summary_pdf_path or None,
             )
         _CANCEL_EVENT = None
     except Exception as e:
         logger.error(f"Error running graph: {str(e)}", exc_info=True)
         error_msg = f"Error: {str(e)}"
-        yield (error_msg, "", "", "", "", "", "", "", "")
+        yield (error_msg, "", "", "", "", "", "", "", "", None, None)
 
 
 def cancel_run():
@@ -229,6 +247,8 @@ def _visibility_updates(compact_mode_val, include_fields_val):
         gr.update(visible=v("formatted_notes")),
         gr.update(visible=v("collected_notes")),
         gr.update(visible=v("summary")),
+        gr.update(visible=v("collected_notes_pdf_path")),
+        gr.update(visible=v("summary_pdf_path")),
     )
 
 
@@ -250,8 +270,15 @@ with gr.Blocks() as demo:
                 "formatted_notes",
                 "collected_notes",
                 "summary",
+                "collected_notes_pdf_path",
+                "summary_pdf_path",
             ],
-            value=["formatted_notes", "summary"],
+            value=[
+                "formatted_notes",
+                "summary",
+                "collected_notes_pdf_path",
+                "summary_pdf_path",
+            ],
         )
         max_items = gr.Number(
             label="Max items per list field (-1 for unlimited)",
@@ -297,6 +324,14 @@ with gr.Blocks() as demo:
     formatted_output = gr.Textbox(label="Formatted Notes", lines=10, visible=True)
     collected_output = gr.Textbox(label="Collected Notes", lines=10, visible=False)
     summary_output = gr.Textbox(label="Summary", lines=5, visible=True)
+    collected_pdf_output = gr.File(
+        label="Collected Notes PDF",
+        visible=False,
+    )
+    summary_pdf_output = gr.File(
+        label="Summary PDF",
+        visible=False,
+    )
 
     run_btn.click(
         run_graph,
@@ -322,6 +357,8 @@ with gr.Blocks() as demo:
             summary_output,
             stats_output,
             stream_mode_output,
+            collected_pdf_output,
+            summary_pdf_output,
         ],
     )
 
@@ -342,6 +379,8 @@ with gr.Blocks() as demo:
             formatted_output,
             collected_output,
             summary_output,
+            collected_pdf_output,
+            summary_pdf_output,
         ],
     )
 
@@ -355,6 +394,8 @@ with gr.Blocks() as demo:
             formatted_output,
             collected_output,
             summary_output,
+            collected_pdf_output,
+            summary_pdf_output,
         ],
     )
 
