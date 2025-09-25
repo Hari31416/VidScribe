@@ -106,6 +106,11 @@ class SummarizerState(TypedDict):
     summary: str
 
 
+class ExporterState(TypedDict):
+    collected_notes_pdf_path: str
+    summary_pdf_path: str
+
+
 # Final overall state after processing all chunks
 class OverAllState(TypedDict):
     chunks: List[str]
@@ -115,6 +120,8 @@ class OverAllState(TypedDict):
     collected_notes: str
     integrates: Annotated[List[ImageIntegratorOverallState], operator.add]
     summary: str
+    collected_notes_pdf_path: str
+    summary_pdf_path: str
     timestamps_output: Annotated[List[List[Timestamp]], operator.add]
     image_insertions_output: Annotated[List[List[ImageInsertion]], operator.add]
     extracted_images_output: Annotated[List[List[ImageExtraction]], operator.add]
