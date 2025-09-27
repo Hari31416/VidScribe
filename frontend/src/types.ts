@@ -58,6 +58,8 @@ export interface ProgressEventPayload {
   phase: string;
   progress: number;
   message: string;
+  // Optional ISO timestamp from backend; if absent, frontend can synthesize
+  timestamp?: string;
   data?: StateSnapshot;
   counters?: Counters;
   stream?: StreamInfo;

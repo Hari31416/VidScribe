@@ -19,158 +19,135 @@ export function CountersPanel({ counters }: Props) {
   }
 
   return (
-    <div className="grid-2">
-      <section>
-        <h3>Notes Progress</h3>
-        <div className="table-scroll">
-          <table>
-            <tbody>
-              <tr>
-                <th scope="row">Raw notes</th>
-                <td>
-                  {formatCount(
-                    counters.notes_created.current,
-                    counters.notes_created.total
-                  )}
-                </td>
-                <td>
-                  {percent(
-                    counters.notes_created.current,
-                    counters.notes_created.total
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Integrated notes</th>
-                <td>
-                  {formatCount(
-                    counters.integrated_image_notes_created.current,
-                    counters.integrated_image_notes_created.total
-                  )}
-                </td>
-                <td>
-                  {percent(
-                    counters.integrated_image_notes_created.current,
-                    counters.integrated_image_notes_created.total
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Formatted notes</th>
-                <td>
-                  {formatCount(
-                    counters.formatted_notes_created.current,
-                    counters.formatted_notes_created.total
-                  )}
-                </td>
-                <td>
-                  {percent(
-                    counters.formatted_notes_created.current,
-                    counters.formatted_notes_created.total
-                  )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+    <div className="grid gap-4 md:grid-cols-2">
+      {/* Notes progress */}
+      <div className="grid gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard
+            title="Raw notes"
+            value={formatCount(
+              counters.notes_created.current,
+              counters.notes_created.total
+            )}
+            sub={percent(
+              counters.notes_created.current,
+              counters.notes_created.total
+            )}
+          />
+          <StatCard
+            title="Integrated"
+            value={formatCount(
+              counters.integrated_image_notes_created.current,
+              counters.integrated_image_notes_created.total
+            )}
+            sub={percent(
+              counters.integrated_image_notes_created.current,
+              counters.integrated_image_notes_created.total
+            )}
+          />
+          <StatCard
+            title="Formatted"
+            value={formatCount(
+              counters.formatted_notes_created.current,
+              counters.formatted_notes_created.total
+            )}
+            sub={percent(
+              counters.formatted_notes_created.current,
+              counters.formatted_notes_created.total
+            )}
+          />
         </div>
-      </section>
+      </div>
 
-      <section>
-        <h3>Media & timestamps</h3>
-        <div className="table-scroll">
-          <table>
-            <tbody>
-              <tr>
-                <th scope="row">Timestamps</th>
-                <td>{counters.timestamps_created.current_items}</td>
-                <td>
-                  {formatCount(
-                    counters.timestamps_created.chunks_completed,
-                    counters.timestamps_created.total_chunks
-                  )}{" "}
-                  (
-                  {percent(
-                    counters.timestamps_created.chunks_completed,
-                    counters.timestamps_created.total_chunks
-                  )}
-                  )
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Image insertions</th>
-                <td>{counters.image_insertions_created.current_items}</td>
-                <td>
-                  {formatCount(
-                    counters.image_insertions_created.chunks_completed,
-                    counters.image_insertions_created.total_chunks
-                  )}{" "}
-                  (
-                  {percent(
-                    counters.image_insertions_created.chunks_completed,
-                    counters.image_insertions_created.total_chunks
-                  )}
-                  )
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Extracted images</th>
-                <td>{counters.extracted_images_created.current_items}</td>
-                <td>
-                  {formatCount(
-                    counters.extracted_images_created.chunks_completed,
-                    counters.extracted_images_created.total_chunks
-                  )}{" "}
-                  (
-                  {percent(
-                    counters.extracted_images_created.chunks_completed,
-                    counters.extracted_images_created.total_chunks
-                  )}
-                  )
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      {/* Media & timestamps */}
+      <div className="grid gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard
+            title="Timestamps"
+            value={`${counters.timestamps_created.current_items}`}
+            sub={`${formatCount(
+              counters.timestamps_created.chunks_completed,
+              counters.timestamps_created.total_chunks
+            )} (${percent(
+              counters.timestamps_created.chunks_completed,
+              counters.timestamps_created.total_chunks
+            )})`}
+          />
+          <StatCard
+            title="Image inserts"
+            value={`${counters.image_insertions_created.current_items}`}
+            sub={`${formatCount(
+              counters.image_insertions_created.chunks_completed,
+              counters.image_insertions_created.total_chunks
+            )} (${percent(
+              counters.image_insertions_created.chunks_completed,
+              counters.image_insertions_created.total_chunks
+            )})`}
+          />
+          <StatCard
+            title="Extracted imgs"
+            value={`${counters.extracted_images_created.current_items}`}
+            sub={`${formatCount(
+              counters.extracted_images_created.chunks_completed,
+              counters.extracted_images_created.total_chunks
+            )} (${percent(
+              counters.extracted_images_created.chunks_completed,
+              counters.extracted_images_created.total_chunks
+            )})`}
+          />
         </div>
-      </section>
+      </div>
 
-      <section>
-        <h3>Finalization</h3>
-        <div className="status-list">
-          <div
-            className={`status-pill ${
-              counters.finalization.collected ? "on" : "off"
-            }`}
-          >
-            <span>Collected notes</span>
-          </div>
-          <div
-            className={`status-pill ${
-              counters.finalization.summary ? "on" : "off"
-            }`}
-          >
-            <span>Summary</span>
-          </div>
-          <div
-            className={`status-pill ${
-              counters.finalization.collected_notes_pdf ? "on" : "off"
-            }`}
-          >
-            <span>Collected notes PDF</span>
-          </div>
-          <div
-            className={`status-pill ${
-              counters.finalization.summary_pdf ? "on" : "off"
-            }`}
-          >
-            <span>Summary PDF</span>
-          </div>
-        </div>
-      </section>
+      {/* Finalization toggles */}
+      <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Pill label="Collected notes" on={counters.finalization.collected} />
+        <Pill label="Summary" on={counters.finalization.summary} />
+        <Pill
+          label="Notes PDF"
+          on={counters.finalization.collected_notes_pdf}
+        />
+        <Pill label="Summary PDF" on={counters.finalization.summary_pdf} />
+      </div>
 
-      <section>
-        <h3>Distribution</h3>
-        <pre>{JSON.stringify(counters.notes_by_type, null, 2)}</pre>
-      </section>
+      {/* Distribution */}
+      <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Pill label={`Raw: ${counters.notes_by_type.raw}`} on />
+        <Pill label={`Integrated: ${counters.notes_by_type.integrated}`} on />
+        <Pill label={`Formatted: ${counters.notes_by_type.formatted}`} on />
+        <Pill label={`Collected: ${counters.notes_by_type.collected}`} on />
+        <Pill label={`Summary: ${counters.notes_by_type.summary}`} on />
+        <Pill label={`PDFs: ${counters.notes_by_type.exported_pdfs}`} on />
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  sub,
+}: {
+  title: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 p-4 bg-white">
+      <div className="text-sm text-slate-500 font-medium">{title}</div>
+      <div className="text-2xl font-extrabold">{value}</div>
+      {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function Pill({ label, on }: { label: string; on?: boolean }) {
+  return (
+    <div
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
+        on ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+      }`}
+    >
+      {label}
     </div>
   );
 }
