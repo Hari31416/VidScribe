@@ -99,6 +99,89 @@ curl -H "Content-Type: application/json" \
   }'
 ```
 
+- Download a YouTube video (returns JSON with file paths and pre-built download URLs):
+
+```bash
+curl -H "Content-Type: application/json" \
+  -X POST http://localhost:8000/videos/download \
+  -d '{
+    "video_id": "wjZofJX0v4M",
+    "resolution": 720
+  }'
+```
+
+- Stream video download progress (SSE). Each event contains status, byte counts, and final result metadata:
+
+```bash
+curl -N -H "Content-Type: application/json" \
+  -X POST http://localhost:8000/videos/download/stream \
+  -d '{
+    "video_id": "wjZofJX0v4M",
+    "resolution": 720
+  }'
+```
+
+- Download a generated asset (use `relative_path` returned by the API or any path under `backend/outputs`):
+
+```bash
+curl -L "http://localhost:8000/files/download?path=notes/wjZofJX0v4M/summary.pdf" --output summary.pdf
+```
+
+## 🖥️ Frontend (Vite + React)
+
+A dedicated Vite/React dashboard lives in `frontend/`. It mirrors the Gradio experience with:
+
+- Streaming progress from `/run/stream` via POST + SSE parsing
+- Final-run support using `/run/final`
+- Configurable stream shaping (compact mode, included fields, truncation limits)
+- Rich counters, event log, and per-section outputs for quick inspection
+
+### Prerequisites
+
+- Node.js 18 or newer (tested with npm 11)
+- The FastAPI server running locally (defaults to `http://localhost:8000`)
+
+### Quickstart
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local   # optional, adjust VITE_API_BASE_URL if backend differs
+npm run dev
+```
+
+This starts Vite on `http://localhost:5173` (configurable via `VITE_PORT`). Update `VITE_API_BASE_URL` if your API listens on a different host or port.
+
+### Production build
+
+```bash
+cd frontend
+npm run build
+```
+
+The optimized assets are emitted to `frontend/dist/` and can be served by any static host.
+
+## 🛠️ Makefile helpers
+
+The repository provides a top-level `Makefile` to streamline common workflows:
+
+```bash
+# Install backend (pip) and frontend (npm) dependencies
+make install
+
+# Build the frontend bundle (backend currently has no build step)
+make build
+
+# Run just one side
+make backend-run
+make frontend-run
+
+# Launch FastAPI and the Vite dev server together (Ctrl+C stops both)
+make run
+```
+
+Adjust `PYTHON`, `NPM`, or other variables when invoking make if your environment differs, for example `make PYTHON=python3.11 install`.
+
 Notes:
 
 - The API reuses the existing LangGraph pipeline. For streaming, each SSE event now has shape `{ phase, progress, message, data, counters, stream }` (see schema below).
