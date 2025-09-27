@@ -12,12 +12,15 @@ toc-depth: 3
 toc-title: "Table of Contents"
 toc-own-page: true
 numbersections: true
+papersize: a4
 fontsize: 11pt
-papersize: a4paper
-geometry: margin=1in
+geometry:
+  - margin=1in
+linestretch: 1.1
 colorlinks: true
 linkcolor: blue
 urlcolor: blue
+pdf-engine: xelatex
 listings: true
 header-includes:
     - \usepackage{listings}
@@ -25,6 +28,31 @@ header-includes:
     - \usepackage{array}
     - \usepackage{xcolor}
     - \usepackage{minted}
+    - \usepackage{microtype}
+    - \usepackage{parskip}
+    - \usemintedstyle{default}"""
+
+DEFAULT_PREAMBLE_WITHOUT_TOC = r"""date: \today
+lang: en
+numbersections: true
+papersize: a4
+fontsize: 11pt
+geometry:
+  - margin=1in
+linestretch: 1.1
+colorlinks: true
+linkcolor: blue
+urlcolor: blue
+pdf-engine: xelatex
+listings: true
+header-includes:
+    - \usepackage{listings}
+    - \usepackage{booktabs}
+    - \usepackage{array}
+    - \usepackage{xcolor}
+    - \usepackage{minted}
+    - \usepackage{microtype}
+    - \usepackage{parskip}
     - \usemintedstyle{default}"""
 
 
@@ -145,11 +173,11 @@ def _guess_title(md_path: Path) -> str:
 
 
 def embed_images_reference_style(
-    input_md: Path, output_md: Path, add_preamble=DEFAULT_PREAMBLE
+    input_md: Path, output_md: Path, preamble=DEFAULT_PREAMBLE
 ):
     rewritten = convert_markdown(input_md)
-    if add_preamble:
+    if preamble:
         title = _guess_title(input_md)
-        add_preamble = f"title: {title}\n" + add_preamble
-        rewritten = f"---\n{add_preamble}\n---\n\n{rewritten}"
+        preamble = f"title: {title}\n" + preamble
+        rewritten = f"---\n{preamble}\n---\n\n{rewritten}"
     output_md.write_text(rewritten, encoding="utf-8")

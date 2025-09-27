@@ -24,10 +24,13 @@ def _check_pandoc_installed() -> bool:
 
 
 def convert_markdown_to_pdf(
-    md_path: Path, pdf_path: Optional[Path] = None, remove_embedded_md: bool = True
+    md_path: Path,
+    pdf_path: Optional[Path] = None,
+    remove_embedded_md: bool = True,
+    preamble: Optional[str] = None,
 ) -> Path:
     embedded_md_path = md_path.with_suffix(".embedded.md")
-    embed_images_reference_style(md_path, embedded_md_path)
+    embed_images_reference_style(md_path, embedded_md_path, preamble=preamble)
     logger.info(
         f"Embedded images in markdown saved to {embedded_md_path}. Now converting to PDF."
     )

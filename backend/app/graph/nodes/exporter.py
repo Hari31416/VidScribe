@@ -6,6 +6,10 @@ from app.utils import create_simple_logger
 from app.services.markdown_to_pdf import convert_markdown_to_pdf
 from app.graph.nodes.notes import save_final_notes_path
 from app.graph.nodes.summarizer import save_summary_path
+from app.services.markdown_embedder import (
+    DEFAULT_PREAMBLE,
+    DEFAULT_PREAMBLE_WITHOUT_TOC,
+)
 
 logger = create_simple_logger(__name__)
 
@@ -22,13 +26,17 @@ async def exporter_agent(state: ExporterState, runtime: Runtime) -> ExporterStat
 
     # convert collected notes to PDF
     collected_notes_pdf_path = convert_markdown_to_pdf(
-        md_path=collected_notes_path, remove_embedded_md=True
+        md_path=collected_notes_path,
+        remove_embedded_md=True,
+        preamble=DEFAULT_PREAMBLE,
     )
     logger.info(f"Collected notes PDF saved at: {collected_notes_pdf_path}")
 
     # convert summary to PDF
     summary_pdf_path = convert_markdown_to_pdf(
-        md_path=summary_path, remove_embedded_md=True
+        md_path=summary_path,
+        remove_embedded_md=True,
+        preamble=DEFAULT_PREAMBLE_WITHOUT_TOC,
     )
     logger.info(f"Summary PDF saved at: {summary_pdf_path}")
 
