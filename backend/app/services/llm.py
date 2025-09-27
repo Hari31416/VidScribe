@@ -1,6 +1,7 @@
 from langchain_litellm import ChatLiteLLM
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import BaseMessage
 from typing import List, AsyncGenerator, Dict, Optional, Union, Literal
 from pydantic import BaseModel
@@ -22,11 +23,12 @@ __all__ = [
     "acompletion_using_litellm",
     "acompletion_using_openai",
     "acompletion_using_openrouter",
+    "acompletion_using_groq",
 ]
 
 
 def create_llm_instance(
-    provider=Literal["google", "litellm", "openai", "openrouter"],
+    provider=Literal["google", "litellm", "openai", "openrouter", "groq"],
     response_format: Optional[BaseModel] = None,
     model=LLM_MODEL,
     **kwargs: Dict,
@@ -37,6 +39,7 @@ def create_llm_instance(
         "litellm": ChatLiteLLM,
         "openai": ChatOpenAI,
         "openrouter": ChatOpenAI,
+        "groq": ChatGroq,
     }
 
     if provider not in chat_runnable_mapping:
@@ -77,7 +80,7 @@ def create_llm_instance(
 
 async def atext_completion(
     messages: List[BaseMessage],
-    provider: Literal["google", "litellm", "openai", "openrouter"] = "google",
+    provider: Literal["google", "litellm", "openai", "openrouter", "groq"] = "google",
     response_format: Optional[BaseModel] = None,
     **kwargs: Dict,
 ) -> str:
@@ -204,6 +207,20 @@ async def acompletion_using_openrouter(
     return await atext_completion(
         messages=messages,
         provider="openrouter",
+        response_format=response_format,
+        **kwargs,
+    )
+
+
+async def acompletion_using_groq(
+    messages: List[BaseMessage],
+    response_format: Optional[BaseModel] = None,
+    **kwargs: Dict,
+) -> str:
+    """Helper function specifically for Groq model completions."""
+    return await atext_completion(
+        messages=messages,
+        provider="groq",
         response_format=response_format,
         **kwargs,
     )

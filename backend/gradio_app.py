@@ -304,7 +304,7 @@ with gr.Blocks() as demo:
     with gr.Row():
         provider = gr.Dropdown(
             label="Provider",
-            choices=["google", "openai", "openrouter"],
+            choices=["google", "openai", "openrouter", "groq"],
             value="google",
         )
         model = gr.Textbox(label="Model", value="gemini-2.0-flash")
