@@ -52,10 +52,13 @@ VidScribe/
 
 ## 🧪 FastAPI (API) Quickstart
 
-A minimal FastAPI server is available alongside the Gradio app with two endpoints:
+A minimal FastAPI server is available alongside the Gradio app with endpoints including:
 
 - POST /run/stream — live progress via Server-Sent Events (SSE)
 - POST /run/final — run to completion and return the final result as JSON
+- POST /videos/download — download a YouTube video (audio/video) to `backend/outputs/videos/{video_id}`
+- POST /videos/download/stream — stream progress events while downloading a video
+- GET /files/download?path=... — serve generated files (PDF, Markdown, media) from `backend/outputs`
 
 How to run locally:
 
