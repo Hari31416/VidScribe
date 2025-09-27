@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Callable, Dict, Optional
 
 import yt_dlp
 
@@ -46,6 +46,7 @@ def download_media(
     filename_template: str = "%(title)s.%(ext)s",
     verbose: bool = False,
     overwrite: bool = False,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     """Download a YouTube video or extract audio using yt_dlp.
 
@@ -133,11 +134,42 @@ def download_media(
         "downloaded_files": [],
     }
 
+    def _emit(progress: Dict[str, Any]) -> None:
+        if progress_callback:
+            try:
+                progress_callback(progress)
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Progress callback raised an exception")
+
     def _hook(d: Dict[str, Any]):
         if d.get("status") == "finished":
             filename = d.get("filename")
             if filename and filename not in result["downloaded_files"]:
                 result["downloaded_files"].append(filename)
+            _emit(
+                {
+                    "status": "finished",
+                    "filename": filename,
+                    "downloaded_bytes": d.get("downloaded_bytes"),
+                    "total_bytes": d.get("total_bytes")
+                    or d.get("total_bytes_estimate"),
+                }
+            )
+        elif d.get("status") == "downloading":
+            _emit(
+                {
+                    "status": "downloading",
+                    "filename": d.get("filename"),
+                    "downloaded_bytes": d.get("downloaded_bytes"),
+                    "total_bytes": d.get("total_bytes")
+                    or d.get("total_bytes_estimate"),
+                    "speed": d.get("speed"),
+                    "elapsed": d.get("elapsed"),
+                    "eta": d.get("eta"),
+                    "fragment_index": d.get("fragment_index"),
+                    "fragment_count": d.get("fragment_count"),
+                }
+            )
 
     ydl_opts.setdefault("progress_hooks", []).append(_hook)
 
@@ -181,14 +213,14 @@ def download_media(
                 logger.info(
                     "Skipping download; files already exist and overwrite=False"
                 )
-                result.update(
-                    {
-                        "status": "skipped",
-                        "titles": titles,
-                        "count": len(entries_probe),
-                        "downloaded_files": expected_files,
-                    }
-                )
+                payload = {
+                    "status": "skipped",
+                    "titles": titles,
+                    "count": len(entries_probe),
+                    "downloaded_files": expected_files,
+                }
+                result.update(payload)
+                _emit(payload)
                 return result
 
             info = ydl.extract_info(url, download=True)
@@ -200,17 +232,22 @@ def download_media(
                 entries = [info]
                 titles = [str(info.get("title"))]
 
-            result.update(
-                {
-                    "status": "success",
-                    "titles": titles,
-                    "count": len(entries),
-                }
-            )
+            payload = {
+                "status": "success",
+                "titles": titles,
+                "count": len(entries),
+                "downloaded_files": result["downloaded_files"],
+            }
+            result.update(payload)
+            _emit(payload)
     except yt_dlp.utils.DownloadError as e:
-        result.update({"status": "error", "error": str(e)})
+        error_payload = {"status": "error", "error": str(e)}
+        result.update(error_payload)
+        _emit(error_payload)
     except Exception as e:  # pylint: disable=broad-except
-        result.update({"status": "error", "error": str(e)})
+        error_payload = {"status": "error", "error": str(e)}
+        result.update(error_payload)
+        _emit(error_payload)
 
     return result
 
