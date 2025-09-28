@@ -4,7 +4,6 @@ import { DEFAULT_STREAM_FIELDS } from "../constants";
 
 export interface FormState {
   video_id: string;
-  video_path: string;
   num_chunks: number;
   provider: string;
   model: string;
@@ -12,7 +11,6 @@ export interface FormState {
 
 export const DEFAULT_FORM: FormState = {
   video_id: import.meta.env.VITE_DEFAULT_VIDEO_ID || "wjZofJX0v4M",
-  video_path: import.meta.env.VITE_DEFAULT_VIDEO_PATH || "",
   num_chunks: parseInt(import.meta.env.VITE_DEFAULT_NUM_CHUNKS || "2"),
   provider: import.meta.env.VITE_DEFAULT_PROVIDER || "google",
   model: import.meta.env.VITE_DEFAULT_MODEL || "gemini-2.0-flash",

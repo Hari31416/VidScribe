@@ -1,5 +1,6 @@
 import { CountersPanel } from "./CountersPanel";
 import { ProgressCard } from "./ProgressCard";
+import { DownloadProgressCard } from "./DownloadProgressCard";
 import type { Counters, ProgressEventPayload, StateSnapshot } from "../types";
 
 interface Props {
@@ -9,6 +10,13 @@ interface Props {
   counters?: Counters;
   snapshot?: StateSnapshot;
   error?: string | null;
+  downloadProgress?: {
+    percent: number;
+    message: string;
+    status?: string;
+  } | null;
+  downloadFilePath?: string | null;
+  runId?: number;
 }
 
 export function MonitoringPanel({
@@ -18,11 +26,24 @@ export function MonitoringPanel({
   counters,
   snapshot,
   error,
+  downloadProgress,
+  downloadFilePath,
+  runId,
 }: Props) {
   return (
     <div className="space-y-6">
+      {/* Download progress bar (separate from pipeline) */}
+      {downloadProgress && (
+        <section className="card">
+          <DownloadProgressCard
+            progress={downloadProgress}
+            filePath={downloadFilePath}
+          />
+        </section>
+      )}
       <section className="card">
         <ProgressCard
+          key={runId}
           latest={latest}
           streamMode={streamMode}
           isStreaming={isStreaming}

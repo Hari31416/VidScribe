@@ -67,7 +67,8 @@ export interface ProgressEventPayload {
 
 export interface RunRequestBody {
   video_id: string;
-  video_path: string;
+  // Optional on the client; backend requires it. We'll inject it after download.
+  video_path?: string;
   num_chunks: number;
   provider: string;
   model: string;

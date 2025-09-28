@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { runFinal, streamRun } from "../api/runGraph";
+import { streamDownload } from "../api/download";
 import type {
   Counters,
   ProgressEventPayload,
@@ -19,6 +20,13 @@ export function useStreamingState() {
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    percent: number;
+    message: string;
+    status?: string;
+  } | null>(null);
+  const [downloadFilePath, setDownloadFilePath] = useState<string | null>(null);
+  const [runId, setRunId] = useState(0);
 
   const streamHandleRef = useRef<StreamHandle>(null);
   const streamMode = latestEvent?.stream?.mode;
@@ -55,10 +63,61 @@ export function useStreamingState() {
       setLatestEvent(undefined);
       setSnapshot(undefined);
       setCounters(undefined);
+      setDownloadFilePath(null);
+      setRunId((r) => r + 1);
       setIsStreaming(true);
       try {
         const handle = await streamRun(
           body,
+          handleStreamProgress,
+          handleStreamError
+        );
+        streamHandleRef.current = handle;
+      } catch (err) {
+        handleStreamError(err);
+      }
+    },
+    [handleStreamError, handleStreamProgress]
+  );
+
+  const startStreamingAuto = useCallback(
+    async (body: RunRequestBody & { video_path?: string }) => {
+      setError(null);
+      if (streamHandleRef.current) {
+        streamHandleRef.current.abort();
+        streamHandleRef.current = null;
+      }
+      setEvents([]);
+      setLatestEvent(undefined);
+      setSnapshot(undefined);
+      setCounters(undefined);
+      setDownloadProgress({
+        percent: 0,
+        message: "Preparing download…",
+        status: "started",
+      });
+      setDownloadFilePath(null);
+      setIsStreaming(true);
+      try {
+        // 1) Download the video via SSE and mirror progress in UI
+        const dl = await streamDownload({ video_id: body.video_id }, (ui) => {
+          setDownloadProgress({
+            percent: ui.percent,
+            message: ui.message,
+            status: ui.status,
+          });
+        });
+        const video_path = await dl.done;
+        setDownloadFilePath(video_path);
+        setDownloadProgress({
+          percent: 100,
+          message: "Download complete",
+          status: "success",
+        });
+        // 2) Start the graph stream as usual; reset run progress (keep download card visible)
+        setRunId((r) => r + 1);
+        const handle = await streamRun(
+          { ...body, video_path },
           handleStreamProgress,
           handleStreamError
         );
@@ -92,7 +151,25 @@ export function useStreamingState() {
     setIsSubmittingFinal(true);
     setError(null);
     try {
-      const result = await runFinal(body);
+      // If video_path is missing, download first quickly via non-streaming path
+      let toSend = body;
+      if (!body.video_path) {
+        try {
+          const { downloadOnce } = await import("../api/download");
+          const path = await downloadOnce({ video_id: body.video_id });
+          setDownloadFilePath(path);
+          setDownloadProgress({
+            percent: 100,
+            message: "Download complete",
+            status: "success",
+          });
+          toSend = { ...body, video_path: path };
+        } catch (e) {
+          // Fall back to original body if download fails
+          console.error("Pre-download for final failed", e);
+        }
+      }
+      const result = await runFinal(toSend);
       const stamped: ProgressEventPayload = {
         ...result,
         timestamp: result.timestamp ?? new Date().toISOString(),
@@ -131,8 +208,12 @@ export function useStreamingState() {
     isSubmittingFinal,
     streamMode,
     activeEvents,
+    downloadProgress,
+    downloadFilePath,
+    runId,
     // actions
     startStreaming,
+    startStreamingAuto,
     cancelStreaming,
     runFinalStage,
   } as const;

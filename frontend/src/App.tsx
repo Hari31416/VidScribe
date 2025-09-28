@@ -37,14 +37,19 @@ export default function App() {
     streamMode,
     activeEvents,
     startStreaming,
+    startStreamingAuto,
     cancelStreaming,
     runFinalStage,
+    downloadProgress,
+    runId,
+    downloadFilePath,
   } = useStreamingState();
 
   const handleSubmitStream = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = makeRunBody({ includeStreamConfig: true });
-    startStreaming(body);
+    // Auto flow: download by video_id then run graph
+    startStreamingAuto(body);
   };
 
   const handleCancel = () => cancelStreaming();
@@ -98,6 +103,9 @@ export default function App() {
           counters={counters}
           snapshot={snapshot}
           error={error}
+          downloadProgress={downloadProgress}
+          downloadFilePath={downloadFilePath}
+          runId={runId}
         />
 
         {/* Right: Detailed Results & Logs */}

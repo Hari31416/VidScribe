@@ -68,19 +68,6 @@ export function ConfigurationPanel(props: Props) {
           />
         </div>
         <div className="space-y-2">
-          <label className="label">Video Path</label>
-          <textarea
-            className="input min-h-36"
-            value={form.video_path}
-            onChange={(e) =>
-              setForm((p) => ({ ...p, video_path: e.target.value }))
-            }
-            placeholder="Absolute path to the downloaded mp4"
-            disabled={disableControls}
-            required
-          />
-        </div>
-        <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="label">Number of Chunks</label>
             <span className="text-sm text-slate-500 font-medium">
