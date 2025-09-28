@@ -32,46 +32,26 @@ frontend-build:
 	cd $(FRONTEND_DIR) && $(NPM) run build
 
 backend-run:
-	@if command -v fuser >/dev/null 2>&1; then \
-		fuser -k $(BACKEND_PORT)/tcp >/dev/null 2>&1 || true; \
-	else \
-		PIDS=$$(lsof -ti tcp:$(BACKEND_PORT) 2>/dev/null); \
-		[ -z "$$PIDS" ] || kill -9 $$PIDS; \
-	fi
+	pkill -9 -f "uvicorn $(UVICORN_APP)" || true; \
 	cd $(BACKEND_DIR) && \
 	if [ -f "$(VENV_ACTIVATE)" ]; then source "$(VENV_ACTIVATE)"; fi; \
 	$(PYTHON) -m $(UVICORN) $(UVICORN_APP) $(UVICORN_OPTS)
 
 frontend-run:
-	@if command -v fuser >/dev/null 2>&1; then \
-		fuser -k $(FRONTEND_PORT)/tcp >/dev/null 2>&1 || true; \
-	else \
-		PIDS=$$(lsof -ti tcp:$(FRONTEND_PORT) 2>/dev/null); \
-		[ -z "$$PIDS" ] || kill -9 $$PIDS; \
-	fi
+	pkill -9 -f "npm run dev" || true; \
 	cd $(FRONTEND_DIR) && $(NPM) run dev
 
 run:
 	@echo "Starting backend and frontend (Ctrl+C to stop both)..."
 	@trap 'kill 0' INT TERM EXIT; \
 		( \
-		if command -v fuser >/dev/null 2>&1; then \
-			fuser -k $(BACKEND_PORT)/tcp >/dev/null 2>&1 || true; \
-		else \
-			PIDS=$$(lsof -ti tcp:$(BACKEND_PORT) 2>/dev/null); \
-			[ -z "$$PIDS" ] || kill -9 $$PIDS; \
-		fi; \
+		pkill -9 -f "uvicorn $(UVICORN_APP)" || true; \
 		cd $(BACKEND_DIR); \
 		if [ -f "$(VENV_ACTIVATE)" ]; then source "$(VENV_ACTIVATE)"; fi; \
 		$(PYTHON) -m $(UVICORN) $(UVICORN_APP) $(UVICORN_OPTS) & \
 		); \
 		( \
-		if command -v fuser >/dev/null 2>&1; then \
-			fuser -k $(FRONTEND_PORT)/tcp >/dev/null 2>&1 || true; \
-		else \
-			PIDS=$$(lsof -ti tcp:$(FRONTEND_PORT) 2>/dev/null); \
-			[ -z "$$PIDS" ] || kill -9 $$PIDS; \
-		fi; \
+		pkill -9 -f "npm run dev" || true; \
 		cd $(FRONTEND_DIR); \
 		$(NPM) run dev \
 		); \
