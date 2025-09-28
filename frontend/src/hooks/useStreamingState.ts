@@ -71,10 +71,22 @@ export function useStreamingState() {
   );
 
   const cancelStreaming = useCallback(() => {
+    // Abort the network stream
     streamHandleRef.current?.abort();
     streamHandleRef.current = null;
+    // Reflect cancellation immediately in UI (like Gradio)
+    const stamped: ProgressEventPayload = {
+      phase: "cancelled",
+      progress: 0,
+      message: "Execution cancelled",
+      timestamp: new Date().toISOString(),
+      data: snapshot,
+      counters,
+    };
+    setLatestEvent(stamped);
+    setEvents((prev) => [...prev.slice(-98), stamped]);
     setIsStreaming(false);
-  }, []);
+  }, [snapshot, counters]);
 
   const runFinalStage = useCallback(async (body: RunRequestBody) => {
     setIsSubmittingFinal(true);

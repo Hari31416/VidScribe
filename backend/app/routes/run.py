@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -56,42 +56,98 @@ def _ensure_pdf_fields(sc: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.post("/stream")
-async def run_stream(req: RunRequest):
+async def run_stream(req: RunRequest, request: Request):
     """Stream live progress as Server-Sent Events (SSE)."""
 
     async def gen() -> AsyncGenerator[str, None]:
         cancel_event = asyncio.Event()
-        try:
-            # Build a plain dict stream_config and drop None values to avoid None lists
-            sc = (
-                _ensure_pdf_fields(req.stream_config.model_dump())
-                if req.stream_config
-                else {}
-            )
-            async for event in stream_run_graph(
-                video_id=req.video_id,
-                video_path=req.video_path,
-                num_chunks=int(req.num_chunks),
-                provider=req.provider,
-                model=req.model,
-                show_graph=req.show_graph,
-                stream_config=sc,
-                cancel_event=cancel_event,
-                refresh_notes=req.refresh_notes,
-            ):
-                yield _to_sse(event)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.error("Streaming failed: %s", exc, exc_info=True)
-            yield _to_sse(
-                {
-                    "phase": "error",
-                    "progress": 0,
-                    "message": f"Error: {exc}",
-                    "data": {},
-                }
-            )
+        queue: "asyncio.Queue[str | None]" = asyncio.Queue()
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+        # Build stream config once
+        sc = (
+            _ensure_pdf_fields(req.stream_config.model_dump())
+            if req.stream_config
+            else {}
+        )
+
+        async def _producer() -> None:
+            """Produce SSE strings onto the queue from the graph stream."""
+            try:
+                logger.info("SSE producer started")
+                async for event in stream_run_graph(
+                    video_id=req.video_id,
+                    video_path=req.video_path,
+                    num_chunks=int(req.num_chunks),
+                    provider=req.provider,
+                    model=req.model,
+                    show_graph=req.show_graph,
+                    stream_config=sc,
+                    cancel_event=cancel_event,
+                    refresh_notes=req.refresh_notes,
+                ):
+                    await queue.put(_to_sse(event))
+            except asyncio.CancelledError:
+                # Expected during cancellation; do not enqueue more data
+                logger.info("SSE producer cancelled")
+                return
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.error("Streaming failed: %s", exc, exc_info=True)
+                await queue.put(
+                    _to_sse(
+                        {
+                            "phase": "error",
+                            "progress": 0,
+                            "message": f"Error: {exc}",
+                            "data": {},
+                        }
+                    )
+                )
+            finally:
+                logger.info("SSE producer finishing")
+                # Signal completion to consumer
+                await queue.put(None)
+
+        async def _watch_client_disconnect(task: asyncio.Task) -> None:
+            """Monitor client connection; cancel producer immediately on disconnect."""
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        logger.warning("Client disconnected; cancelling run")
+                        cancel_event.set()
+                        task.cancel()
+                        break
+                    await asyncio.sleep(0.2)
+            except asyncio.CancelledError:
+                # Normal on shutdown
+                pass
+
+        producer_task: asyncio.Task = asyncio.create_task(_producer())
+        watcher_task: asyncio.Task = asyncio.create_task(
+            _watch_client_disconnect(producer_task)
+        )
+
+        try:
+            # Yield an initial SSE comment to flush headers (ensures 200 OK visible)
+            yield ": connected\n\n"
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            # Ensure tasks are stopped
+            watcher_task.cancel()
+            producer_task.cancel()
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/final")
