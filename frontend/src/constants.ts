@@ -14,7 +14,6 @@ export const STREAM_FIELDS = [
 ] as const;
 
 export const DEFAULT_STREAM_FIELDS = [
-  "formatted_notes",
   "summary",
   "collected_notes_pdf_path",
   "summary_pdf_path",

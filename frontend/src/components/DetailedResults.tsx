@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { StateSnapshot } from "../types";
 import { getFileDownloadUrl } from "../api/runGraph";
-import { EventLog } from "./EventLog";
 
 interface Props {
   snapshot?: StateSnapshot;
@@ -15,7 +14,7 @@ interface Props {
 }
 
 export function DetailedResults({ snapshot, events }: Props) {
-  const [activeTab, setActiveTab] = useState<"notes" | "media" | "log">(
+  const [activeTab, setActiveTab] = useState<"notes" | "media" | "summary">(
     "notes"
   );
 
@@ -47,13 +46,13 @@ export function DetailedResults({ snapshot, events }: Props) {
         </button>
         <button
           className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${
-            activeTab === "log"
+            activeTab === "summary"
               ? "border-violet-600 text-violet-700"
               : "border-transparent text-slate-500"
           }`}
-          onClick={() => setActiveTab("log")}
+          onClick={() => setActiveTab("summary")}
         >
-          Event Log
+          Summary
         </button>
       </div>
 
@@ -116,9 +115,39 @@ export function DetailedResults({ snapshot, events }: Props) {
         </div>
       )}
 
-      {activeTab === "log" && (
-        <div className="space-y-2">
-          <EventLog events={events} />
+      {activeTab === "summary" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={!snapshot?.collected_notes_pdf_path}
+              onClick={() => {
+                const p = snapshot?.collected_notes_pdf_path;
+                if (p) window.open(getFileDownloadUrl(p), "_blank");
+              }}
+            >
+              Download Collected Notes PDF
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={!snapshot?.summary_pdf_path}
+              onClick={() => {
+                const p = snapshot?.summary_pdf_path;
+                if (p) window.open(getFileDownloadUrl(p), "_blank");
+              }}
+            >
+              Download Summary PDF
+            </button>
+          </div>
+          <label className="label">Summary</label>
+          <textarea
+            className="input min-h-[320px]"
+            readOnly
+            value={snapshot?.summary || ""}
+            placeholder="No summary yet."
+          />
         </div>
       )}
     </section>

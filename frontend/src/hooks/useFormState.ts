@@ -11,12 +11,11 @@ export interface FormState {
 }
 
 export const DEFAULT_FORM: FormState = {
-  video_id: "wjZofJX0v4M",
-  video_path:
-    "/home/hari/Desktop/VidScribe/backend/outputs/videos/wjZofJX0v4M/Transformers_the_tech_behind_LLMs_Deep_Learning_Chapter_5.mp4",
-  num_chunks: 2,
-  provider: "google",
-  model: "gemini-2.0-flash",
+  video_id: import.meta.env.VITE_DEFAULT_VIDEO_ID || "wjZofJX0v4M",
+  video_path: import.meta.env.VITE_DEFAULT_VIDEO_PATH || "",
+  num_chunks: parseInt(import.meta.env.VITE_DEFAULT_NUM_CHUNKS || "2"),
+  provider: import.meta.env.VITE_DEFAULT_PROVIDER || "google",
+  model: import.meta.env.VITE_DEFAULT_MODEL || "gemini-2.0-flash",
 };
 
 export function useFormState() {

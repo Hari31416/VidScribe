@@ -33,15 +33,6 @@ export function MonitoringPanel({
         <h2 className="text-lg font-semibold mb-4">Statistics</h2>
         <CountersPanel counters={counters} />
       </section>
-      <section className="card">
-        <h2 className="text-lg font-semibold mb-2">Summary</h2>
-        <textarea
-          className="input min-h-48"
-          placeholder="Generated summary will appear here"
-          readOnly
-          value={snapshot?.summary ?? ""}
-        />
-      </section>
       {error && (
         <section className="card border border-red-200">
           <h2 className="text-lg font-semibold text-red-700">Errors</h2>
