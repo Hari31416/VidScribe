@@ -101,7 +101,12 @@ export default function App() {
         />
 
         {/* Right: Detailed Results & Logs */}
-        <DetailedResults snapshot={snapshot} events={activeEvents} />
+        <DetailedResults
+          snapshot={snapshot}
+          includeFields={includeFields}
+          compactMode={compactMode}
+          events={activeEvents}
+        />
       </div>
     </div>
   );

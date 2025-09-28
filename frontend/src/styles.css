@@ -11,12 +11,12 @@
 .btn { @apply inline-flex items-center gap-2 font-semibold rounded-full px-4 py-2 transition disabled:opacity-60 disabled:cursor-not-allowed; }
 .btn-primary { @apply text-white bg-gradient-to-tr from-blue-600 to-violet-600 shadow-lg; }
 .btn-secondary { @apply bg-white text-gray-900 shadow-md; }
-.input { @apply w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-4 focus:ring-blue-200 focus:bg-white; }
+.input { @apply w-full max-w-full resize-y rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 focus:outline-none focus:ring-4 focus:ring-blue-200 focus:bg-white; }
 .label { @apply font-semibold text-gray-800; }
 .label-desc { @apply text-sm text-gray-500; }
 
 /* Progress bar */
 .progress-wrap { @apply grid gap-3; }
 .progress-track { @apply h-3 rounded-full bg-gray-200 overflow-hidden; }
-.progress-value { @apply h-full bg-gradient-to-tr from-emerald-400 to-emerald-600 transition-[width]; }
+.progress-value { @apply block h-full bg-gradient-to-tr from-emerald-400 to-emerald-600 transition-[width]; }
 
