@@ -169,7 +169,7 @@ def _guess_title(md_path: Path) -> str:
         if line.startswith("#"):
             return line.lstrip("#").strip()
 
-    return md_path.stem.replace("-", " ").replace("_", " ").title()
+    return md_path.stem.replace("-", " ").replace("_", " ").replace(":", " ").title()
 
 
 def embed_images_reference_style(
