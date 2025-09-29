@@ -24,11 +24,12 @@ __all__ = [
     "acompletion_using_openai",
     "acompletion_using_openrouter",
     "acompletion_using_groq",
+    "acompletion_using_ollama",
 ]
 
 
 def create_llm_instance(
-    provider=Literal["google", "litellm", "openai", "openrouter", "groq"],
+    provider=Literal["google", "litellm", "openai", "openrouter", "groq", "ollama"],
     response_format: Optional[BaseModel] = None,
     model=LLM_MODEL,
     **kwargs: Dict,
@@ -40,6 +41,7 @@ def create_llm_instance(
         "openai": ChatOpenAI,
         "openrouter": ChatOpenAI,
         "groq": ChatGroq,
+        "ollama": ChatOpenAI,
     }
 
     if provider not in chat_runnable_mapping:
@@ -70,6 +72,13 @@ def create_llm_instance(
                 "X-Title": os.getenv("SITE_NAME", "example.com"),
             }
 
+    if provider == "ollama":
+        logger.debug("Configuring Ollama specific settings.")
+        if "api_key" not in kwargs:
+            kwargs["api_key"] = os.getenv("OLLAMA_API_KEY")
+        if "base_url" not in kwargs:
+            kwargs["base_url"] = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+
     llm = chat_runnable(model=model, max_retries=3, **kwargs)
 
     if response_format:
@@ -80,7 +89,9 @@ def create_llm_instance(
 
 async def atext_completion(
     messages: List[BaseMessage],
-    provider: Literal["google", "litellm", "openai", "openrouter", "groq"] = "google",
+    provider: Literal[
+        "google", "litellm", "openai", "openrouter", "groq", "ollama"
+    ] = "google",
     response_format: Optional[BaseModel] = None,
     **kwargs: Dict,
 ) -> str:
@@ -221,6 +232,20 @@ async def acompletion_using_groq(
     return await atext_completion(
         messages=messages,
         provider="groq",
+        response_format=response_format,
+        **kwargs,
+    )
+
+
+async def acompletion_using_ollama(
+    messages: List[BaseMessage],
+    response_format: Optional[BaseModel] = None,
+    **kwargs: Dict,
+) -> str:
+    """Helper function specifically for Ollama model completions."""
+    return await atext_completion(
+        messages=messages,
+        provider="ollama",
         response_format=response_format,
         **kwargs,
     )
