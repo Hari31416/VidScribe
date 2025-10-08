@@ -2,6 +2,8 @@ from langchain_litellm import ChatLiteLLM
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
+from langchain_ollama import ChatOllama
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import BaseMessage
 from typing import List, AsyncGenerator, Dict, Optional, Union, Literal
 from pydantic import BaseModel
@@ -25,6 +27,7 @@ __all__ = [
     "acompletion_using_openrouter",
     "acompletion_using_groq",
     "acompletion_using_ollama",
+    "acompletion_using_nvidia",
 ]
 
 
@@ -41,7 +44,8 @@ def create_llm_instance(
         "openai": ChatOpenAI,
         "openrouter": ChatOpenAI,
         "groq": ChatGroq,
-        "ollama": ChatOpenAI,
+        "ollama": ChatOllama,
+        "nvidia": ChatNVIDIA,
     }
 
     if provider not in chat_runnable_mapping:
@@ -77,7 +81,9 @@ def create_llm_instance(
         if "api_key" not in kwargs:
             kwargs["api_key"] = os.getenv("OLLAMA_API_KEY")
         if "base_url" not in kwargs:
-            kwargs["base_url"] = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+            kwargs["base_url"] = os.getenv(
+                "OLLAMA_API_BASE", "http://localhost:11434/v1"
+            )
 
     llm = chat_runnable(model=model, max_retries=3, **kwargs)
 
@@ -90,7 +96,7 @@ def create_llm_instance(
 async def atext_completion(
     messages: List[BaseMessage],
     provider: Literal[
-        "google", "litellm", "openai", "openrouter", "groq", "ollama"
+        "google", "litellm", "openai", "openrouter", "groq", "ollama", "nvidia"
     ] = "google",
     response_format: Optional[BaseModel] = None,
     **kwargs: Dict,
@@ -246,6 +252,20 @@ async def acompletion_using_ollama(
     return await atext_completion(
         messages=messages,
         provider="ollama",
+        response_format=response_format,
+        **kwargs,
+    )
+
+
+async def acompletion_using_nvidia(
+    messages: List[BaseMessage],
+    response_format: Optional[BaseModel] = None,
+    **kwargs: Dict,
+) -> str:
+    """Helper function specifically for NVIDIA model completions."""
+    return await atext_completion(
+        messages=messages,
+        provider="nvidia",
         response_format=response_format,
         **kwargs,
     )
