@@ -167,7 +167,13 @@ def _guess_title(md_path: Path) -> str:
     for line in md.splitlines():
         line = line.strip()
         if line.startswith("#"):
-            return line.lstrip("#").strip()
+            return (
+                line.lstrip("#")
+                .strip()
+                .replace("-", " ")
+                .replace("_", " ")
+                .replace(":", " ")
+            )
 
     return md_path.stem.replace("-", " ").replace("_", " ").replace(":", " ").title()
 
