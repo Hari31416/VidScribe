@@ -53,14 +53,19 @@ def _compute_progress(state: OverAllState, expected_chunks: int) -> Tuple[int, s
     - collect_notes: 90%
     - summary: 100%
     """
+    # done
+    if state.get("summary_pdf_path"):
+        return 100, "summary_pdf_path"
 
+    if state.get("collected_notes_pdf_path"):
+        return 95, "collected_notes_pdf_path"
     # Done
     if state.get("summary"):
-        return 100, "summary"
+        return 90, "summary"
 
     # Collected notes
     if state.get("collected_notes"):
-        return 90, "collect_notes"
+        return 85, "collect_notes"
 
     # Formatting progress
     formatted: List[str] = state.get("formatted_notes") or []

@@ -10,6 +10,7 @@ Your final output should be a polished, cohesive set of notes that feels as if i
 2.  **Establish a Logical Hierarchy:** Analyze the content to identify main themes and sub-topics. Organize the information using a clear and logical structure with appropriate markdown headers (`#`, `##`, `###`). Do not be afraid to create new sections if it improves clarity.
 3.  **Eliminate Redundancy:** Intelligently identify and remove duplicate information. If two notes phrase the same point differently, choose the clearer phrasing or merge them into a more complete version.
 4.  **Ensure Fluidity and Cohesion:** The final document must flow naturally. Use paragraphs for explanations and bullet points for lists or key takeaways. Ensure smooth transitions between topics.
+5. **Include Images:** The notes provided to you may have images. If any note contains an image reference, ensure that the image is appropriately placed in the final document, with the same caption and image link.
 
 ### Formatting and Style Guide
 
