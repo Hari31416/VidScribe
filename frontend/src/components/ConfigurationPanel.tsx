@@ -1,6 +1,7 @@
 import { FormEvent } from "react";
 import { STREAM_FIELDS } from "../constants";
 import type { FormState } from "../hooks/useFormState";
+import { UploadPanel } from "./UploadPanel";
 
 interface Props {
   form: FormState;
@@ -50,10 +51,20 @@ export function ConfigurationPanel(props: Props) {
 
   const disableControls = isStreaming;
 
+  const handleUploadSuccess = (videoId: string, videoPath: string) => {
+    setForm((p) => ({ ...p, video_id: videoId }));
+  };
+
   return (
     <section className="card h-fit">
       <h2 className="text-xl font-semibold mb-4">Configuration & Controls</h2>
       <form className="space-y-4" onSubmit={onSubmit}>
+        {/* Upload Panel */}
+        <UploadPanel
+          onUploadSuccess={handleUploadSuccess}
+          disabled={disableControls}
+        />
+
         <div className="space-y-2">
           <label className="label">Video ID</label>
           <input
@@ -62,10 +73,13 @@ export function ConfigurationPanel(props: Props) {
             onChange={(e) =>
               setForm((p) => ({ ...p, video_id: e.target.value }))
             }
-            placeholder="e.g., FOONnnq975k"
+            placeholder="e.g., FOONnnq975k or upload_xyz123"
             disabled={disableControls}
             required
           />
+          <p className="text-xs text-slate-500">
+            Use a YouTube video ID or an uploaded video ID (from above)
+          </p>
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">

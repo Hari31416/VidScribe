@@ -6,10 +6,12 @@ interface Props {
 
 function percent(current: number, total: number): string {
   if (!total) return "0%";
+  current = Math.min(current, total);
   return `${Math.round((current / total) * 100)}%`;
 }
 
 function formatCount(current: number, total: number): string {
+  current = Math.min(current, total);
   return `${current}/${total}`;
 }
 
