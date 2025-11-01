@@ -53,7 +53,8 @@ def download_media(
     Parameters
     ----------
     video_id : str
-        The YouTube video ID or URL to download.
+        The YouTube video ID or URL to download. If the video_id starts with "upload_",
+        it will check for cached files instead of downloading from YouTube.
     resolution : Optional[int], optional
         The maximum video resolution (height in pixels) to download. If None, no limit is applied.
     audio_only : bool, optional
@@ -82,6 +83,66 @@ def download_media(
 
     if not output_dir.endswith(video_id):
         output_dir = os.path.join(output_dir, video_id)
+
+    # Check if this is an uploaded video (starts with "upload_" prefix)
+    if video_id.startswith("upload_"):
+        logger.info(
+            f"Detected uploaded video ID: {video_id}. Checking for cached files..."
+        )
+
+        def _emit(progress: Dict[str, Any]) -> None:
+            if progress_callback:
+                try:
+                    progress_callback(progress)
+                except Exception:  # pylint: disable=broad-except
+                    logger.exception("Progress callback raised an exception")
+
+        # Check if the output directory exists and has video files
+        if os.path.exists(output_dir):
+            files_in_dir = os.listdir(output_dir)
+            # Filter for common video files
+            video_extensions = (".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv")
+            video_files = [
+                os.path.join(output_dir, f)
+                for f in files_in_dir
+                if f.lower().endswith(video_extensions)
+            ]
+
+            if video_files:
+                logger.info(
+                    f"Found {len(video_files)} cached video file(s) for uploaded video {video_id}. "
+                    "Skipping download."
+                )
+
+                # Return success with cached files
+                payload = {
+                    "status": "skipped",
+                    "titles": ["Uploaded Video"],
+                    "count": len(video_files),
+                    "downloaded_files": video_files,
+                    "output_dir": os.path.abspath(output_dir),
+                    "audio_only": audio_only,
+                    "video_only": video_only,
+                    "resolution": resolution,
+                    "url": None,  # No URL for uploaded videos
+                }
+                _emit(payload)
+                return payload
+
+        # If no cached files found, return error
+        logger.error(
+            f"No cached video files found for uploaded video ID: {video_id} at {output_dir}. "
+            "Please upload the video first using the /uploads/video-and-transcript endpoint."
+        )
+        return {
+            "status": "error",
+            "error": f"No cached video found for upload ID: {video_id}. Please upload the video first.",
+            "output_dir": os.path.abspath(output_dir),
+            "audio_only": audio_only,
+            "video_only": video_only,
+            "resolution": resolution,
+            "downloaded_files": [],
+        }
 
     if os.path.exists(output_dir):
         files_in_dir = os.listdir(output_dir)
