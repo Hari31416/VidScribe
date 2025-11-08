@@ -18,6 +18,21 @@ export interface CheckUploadResponse {
   ready_for_processing: boolean;
 }
 
+export interface DeleteResponse {
+  status: string;
+  video_id: string;
+  message: string;
+  deleted_items: {
+    videos?: boolean;
+    frames?: boolean;
+  };
+  space_freed_mb?: number;
+}
+
+export interface ListUploadsResponse {
+  uploaded_video_ids: string[];
+}
+
 /**
  * Upload a video file and its transcript to the backend
  * @param videoFile - The video file to upload
@@ -79,4 +94,104 @@ export async function checkUpload(
   }
 
   return (await response.json()) as CheckUploadResponse;
+}
+
+/**
+ * List all uploaded video IDs
+ * @returns Promise with list of video IDs
+ */
+export async function listUploads(): Promise<ListUploadsResponse> {
+  const response = await fetch(`${API_BASE_URL}/uploads/list`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `List uploads failed with status ${response.status}: ${errorText}`
+    );
+  }
+
+  return (await response.json()) as ListUploadsResponse;
+}
+
+/**
+ * Delete video files for a given video ID
+ * @param videoId - The video ID whose video files should be deleted
+ * @returns Promise with delete response
+ */
+export async function deleteVideo(videoId: string): Promise<DeleteResponse> {
+  const response = await fetch(`${API_BASE_URL}/uploads/videos/${videoId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let errorMessage: string;
+    try {
+      const errorJson = JSON.parse(errorText);
+      errorMessage = errorJson.detail || errorText;
+    } catch {
+      errorMessage = errorText;
+    }
+    throw new Error(
+      `Delete video failed with status ${response.status}: ${errorMessage}`
+    );
+  }
+
+  return (await response.json()) as DeleteResponse;
+}
+
+/**
+ * Delete frame images for a given video ID
+ * @param videoId - The video ID whose frame images should be deleted
+ * @returns Promise with delete response
+ */
+export async function deleteFrames(videoId: string): Promise<DeleteResponse> {
+  const response = await fetch(`${API_BASE_URL}/uploads/frames/${videoId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let errorMessage: string;
+    try {
+      const errorJson = JSON.parse(errorText);
+      errorMessage = errorJson.detail || errorText;
+    } catch {
+      errorMessage = errorText;
+    }
+    throw new Error(
+      `Delete frames failed with status ${response.status}: ${errorMessage}`
+    );
+  }
+
+  return (await response.json()) as DeleteResponse;
+}
+
+/**
+ * Delete both video files and frame images for a given video ID
+ * @param videoId - The video ID whose video and frame files should be deleted
+ * @returns Promise with delete response
+ */
+export async function deleteStorage(videoId: string): Promise<DeleteResponse> {
+  const response = await fetch(`${API_BASE_URL}/uploads/storage/${videoId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let errorMessage: string;
+    try {
+      const errorJson = JSON.parse(errorText);
+      errorMessage = errorJson.detail || errorText;
+    } catch {
+      errorMessage = errorText;
+    }
+    throw new Error(
+      `Delete storage failed with status ${response.status}: ${errorMessage}`
+    );
+  }
+
+  return (await response.json()) as DeleteResponse;
 }

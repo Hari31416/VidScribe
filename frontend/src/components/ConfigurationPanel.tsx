@@ -2,6 +2,7 @@ import { FormEvent } from "react";
 import { STREAM_FIELDS } from "../constants";
 import type { FormState } from "../hooks/useFormState";
 import { UploadPanel } from "./UploadPanel";
+import { StorageManagement } from "./StorageManagement";
 
 interface Props {
   form: FormState;
@@ -64,6 +65,9 @@ export function ConfigurationPanel(props: Props) {
           onUploadSuccess={handleUploadSuccess}
           disabled={disableControls}
         />
+
+        {/* Storage Management Panel */}
+        <StorageManagement disabled={disableControls} />
 
         <div className="space-y-2">
           <label className="label">Video ID</label>

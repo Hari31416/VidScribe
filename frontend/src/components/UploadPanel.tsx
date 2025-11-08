@@ -29,9 +29,14 @@ export function UploadPanel({ onUploadSuccess, disabled = false }: Props) {
   const handleTranscriptChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate it's a JSON file
-      if (!file.name.endsWith(".json")) {
-        setError("Transcript must be a JSON file");
+      // Validate it's a JSON, VTT, or SRT file
+      const validExtensions = [".json", ".vtt", ".srt"];
+      const hasValidExtension = validExtensions.some((ext) =>
+        file.name.toLowerCase().endsWith(ext)
+      );
+
+      if (!hasValidExtension) {
+        setError("Transcript must be a JSON, VTT, or SRT file");
         return;
       }
       setTranscriptFile(file);
@@ -147,16 +152,15 @@ export function UploadPanel({ onUploadSuccess, disabled = false }: Props) {
 
           <div className="space-y-2">
             <label className="label">
-              Transcript File (JSON)
+              Transcript File (JSON, VTT, or SRT)
               <span className="text-xs text-slate-500 ml-2 font-normal">
-                Format: [{"{"}"text": "...", "start": 0.0, "duration": 2.5{"}"},
-                ...]
+                Supports YouTube JSON, WebVTT, or SubRip formats
               </span>
             </label>
             <input
               ref={transcriptInputRef}
               type="file"
-              accept=".json,application/json"
+              accept=".json,.vtt,.srt,application/json,text/vtt,application/x-subrip"
               onChange={handleTranscriptChange}
               disabled={uploading || disabled}
               className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 disabled:opacity-50"
@@ -223,9 +227,22 @@ export function UploadPanel({ onUploadSuccess, disabled = false }: Props) {
               will be automatically filled in the form above.
             </p>
             <p>
-              The transcript JSON should follow YouTube transcript API format
-              with "text", "start", and "duration" fields for each entry.
+              <strong>Supported formats:</strong>
             </p>
+            <ul className="list-disc list-inside pl-2 space-y-0.5">
+              <li>
+                <strong>JSON:</strong> YouTube transcript format with "text",
+                "start", and "duration" fields
+              </li>
+              <li>
+                <strong>VTT:</strong> WebVTT subtitle format (will be converted
+                automatically)
+              </li>
+              <li>
+                <strong>SRT:</strong> SubRip subtitle format (will be converted
+                automatically)
+              </li>
+            </ul>
           </div>
         </div>
       )}
