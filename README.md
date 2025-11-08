@@ -7,16 +7,15 @@ VidScribe is an AI-powered tool that turns videos into **structured, markdown-st
 - Convert **video transcripts** into clean, well-structured notes.
 - Enrich notes with **key frames/images** from the video.
 - Provide an **optional summary** for quick review.
-- Simple **Gradio app** for the MVP (later React frontend planned).
+- Simple React frontend for easy interaction.
 
 ## 🛠️ Tech Stack
 
 - **Backend / Orchestration**: Python, FastAPI (future), LangGraph
 - **LLM**: OpenAI (or other LLMs)
-- **Transcript**: Whisper / YouTube Transcript API
+- **Transcript**: YouTube Transcript API / VTT / SRT / JSON
 - **Video Frames**: ffmpeg / OpenCV + CLIP (optional filtering)
-- **Frontend (MVP)**: Gradio
-- **Future Frontend**: React
+- **Frontend**: React
 
 ## 📂 Planned Project Structure (MVP)
 
@@ -127,6 +126,73 @@ curl -N -H "Content-Type: application/json" \
 curl -L "http://localhost:8000/files/download?path=notes/wjZofJX0v4M/summary.pdf" --output summary.pdf
 ```
 
+## 📤 Custom Video & Transcript Upload
+
+Upload your own videos and transcripts for processing without needing YouTube videos. Supports multiple transcript formats:
+
+### Upload Endpoints
+
+- **POST /uploads/video-and-transcript** — Upload a video file with transcript
+- **GET /uploads/check/{video_id}** — Check if video and transcript exist
+- **GET /uploads/list** — List all uploaded video folders
+
+### Supported Transcript Formats
+
+- **JSON**: YouTube transcript API format with `text`, `start`, and `duration` fields
+- **VTT**: WebVTT subtitle format (automatically converted)
+- **SRT**: SubRip subtitle format (automatically converted)
+
+### Upload Example
+
+```bash
+curl -X POST "http://localhost:8000/uploads/video-and-transcript" \
+  -F "video=@my_video.mp4" \
+  -F "transcript=@transcript.vtt" \
+  -F "video_id=my_custom_video"
+```
+
+### List Available Uploads
+
+```bash
+curl "http://localhost:8000/uploads/list"
+# Returns: {"uploaded_video_ids": ["upload_abc123", "upload_def456", ...]}
+```
+
+## 🗂️ Storage Management
+
+Manage storage space by deleting large video files and extracted frames. Transcripts and generated notes are preserved.
+
+### Storage Management Endpoints
+
+- **DELETE /uploads/videos/{video_id}** — Delete video files only
+- **DELETE /uploads/frames/{video_id}** — Delete frame images only
+- **DELETE /uploads/storage/{video_id}** — Delete both videos and frames
+
+### Delete Examples
+
+```bash
+# Delete video files only (frees most space)
+curl -X DELETE "http://localhost:8000/uploads/videos/upload_abc123"
+
+# Delete frame images only
+curl -X DELETE "http://localhost:8000/uploads/frames/upload_abc123"
+
+# Delete both videos and frames (maximum space freed)
+curl -X DELETE "http://localhost:8000/uploads/storage/upload_abc123"
+```
+
+Each deletion response includes the space freed in MB:
+
+```json
+{
+  "status": "success",
+  "video_id": "upload_abc123",
+  "message": "Successfully deleted storage for video_id: upload_abc123",
+  "deleted_items": { "videos": true, "frames": true },
+  "space_freed_mb": 245.67
+}
+```
+
 ## 🖥️ Frontend (Vite + React)
 
 A dedicated Vite/React dashboard lives in `frontend/`. It mirrors the Gradio experience with:
@@ -135,6 +201,8 @@ A dedicated Vite/React dashboard lives in `frontend/`. It mirrors the Gradio exp
 - Final-run support using `/run/final`
 - Configurable stream shaping (compact mode, included fields, truncation limits)
 - Rich counters, event log, and per-section outputs for quick inspection
+- **Custom video & transcript upload** with support for VTT, SRT, and JSON formats
+- **Storage management** with dropdown selection of uploaded videos for deletion
 
 ### Prerequisites
 
@@ -287,12 +355,23 @@ The `stream_config` object controls shaping of `data`:
 
 MVP is under active development: transcript → structured notes working; image extraction & integration stage added; API and Gradio support streaming with selectable fields including `image_integrated_notes`. Stream events now include derived `counters` and `stream` metadata to support richer progress UIs.
 
-### Gradio UI enhancements
+**Recent additions:**
 
-- Live "Stats" panel with compact progress bars and tables for:
-  - Raw/Integrated/Formatted notes by chunk
-  - Timestamps, Image insertions, Extracted images (items + chunks)
-- "Stream" badge showing whether the current event is a cumulative `values` snapshot or an `updates` delta.
+- ✅ Custom video & transcript upload support (VTT, SRT, JSON formats)
+- ✅ Storage management system for deleting videos and frames
+- ✅ Enhanced frontend with upload and storage management UI
+- ✅ Automatic transcript format conversion (VTT/SRT → JSON)
+
+### Gradio UI Deprecation
+
+Gradio UI is being deprecated in favor of the React frontend. The Gradio app will remain functional for now but will not receive further enhancements.
+
+### React Frontend Features
+
+- **Upload Panel**: Upload custom videos with VTT, SRT, or JSON transcripts
+- **Storage Management**: Dropdown selection of uploaded videos for deletion with space usage feedback
+- **Streaming Progress**: Real-time pipeline progress with counters and event logs
+- **Configuration Options**: Advanced settings for stream shaping and processing parameters
 
 ## The Architecture
 
