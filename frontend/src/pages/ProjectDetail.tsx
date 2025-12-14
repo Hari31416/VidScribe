@@ -35,7 +35,8 @@ export function ProjectDetail() {
         provider: "google",
         model: "gemini-2.0-flash",
         numChunks: 2,
-        isCustomModel: false
+        isCustomModel: false,
+        userFeedback: ""
     });
 
     // Preview mode state
@@ -75,6 +76,7 @@ export function ProjectDetail() {
                     show_graph: false,
                     refresh_notes: true,
                     add_images: projectData.video_exists,
+                    user_feedback: config.userFeedback || null,
                     stream_config: {
                         include_data: true,
                         include_fields: ["formatted_notes", "summary", "timestamps_output", "collected_notes_pdf_path", "summary_pdf_path"]
@@ -286,6 +288,21 @@ export function ProjectDetail() {
                                             </Button>
                                         )}
                                     </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">User Feedback / Instructions (Optional)</label>
+                                    <textarea
+                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        placeholder="e.g., 'Focus on practical examples', 'Include code snippets', 'Make the summary concise', 'Use bullet points instead of paragraphs'..."
+                                        value={config.userFeedback}
+                                        onChange={(e) => setConfig({ ...config, userFeedback: e.target.value })}
+                                        disabled={isRunning}
+                                        rows={3}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        These instructions will be sent to the LLM when generating final notes and summary.
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2">
