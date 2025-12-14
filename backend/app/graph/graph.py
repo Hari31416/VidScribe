@@ -44,7 +44,9 @@ def display_graph(graph: CompiledStateGraph, use_ascii: bool = True, **kwargs) -
 def create_transcript_chunks(
     state: OverAllState, runtime: Runtime
 ) -> Dict[str, List[str]]:
-    raw_transcript = get_raw_transcript(runtime.context["video_id"])
+    raw_transcript = get_raw_transcript(
+        runtime.context["video_id"], username=runtime.context.get("username")
+    )
     chunks = chunk_transcript(
         raw_transcript, num_chunks=runtime.context["num_chunks"], show_avg_tokens=True
     )

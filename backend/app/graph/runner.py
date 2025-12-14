@@ -290,6 +290,8 @@ def _compute_counters(state: OverAllState, expected_chunks: int) -> Dict[str, An
 async def stream_run_graph(
     *,
     video_id: str,
+    username: str,
+    run_id: str,  # Run ID for notes versioning
     video_path: Optional[str] = None,
     num_chunks: int = 2,
     provider: str = "google",
@@ -306,9 +308,11 @@ async def stream_run_graph(
     Parameters
     ----------
     video_id : str
-        The video ID to process
+        The project/video ID to process
+    username : str
+        The user who owns this project (for MinIO storage isolation)
     video_path : Optional[str]
-        Path to the video file. Required if add_images=True.
+        Path to the video file. Required if add_images=True and video is local.
     add_images : bool
         If True, extract frames and integrate images into notes.
         If False, skip all image-related processing (transcript-only mode).
@@ -318,15 +322,8 @@ async def stream_run_graph(
 
     Yields ProgressEvent dictionaries suitable for UI consumption.
     """
-    # Validate: if add_images is True, video_path is required
-    if add_images and not video_path:
-        yield {
-            "phase": "error",
-            "progress": 0,
-            "message": "video_path is required when add_images=True",
-            "data": {},
-        }
-        return
+    # With MinIO, we no longer require video_path for add_images
+    # The video will be downloaded from MinIO if needed
 
     graph = create_graph(show_graph=show_graph, add_images=add_images)
 
@@ -335,6 +332,8 @@ async def stream_run_graph(
         provider=provider,
         model=model,
         video_id=video_id,
+        username=username,
+        run_id=run_id,
         video_path=video_path,
         num_chunks=int(num_chunks),
         refresh_notes=refresh_notes,

@@ -11,6 +11,7 @@ from .utils import (
 )
 from .states import ChunkNotesAgentState, NotesCollectorAgentState
 from app.services import create_llm_instance
+from app.services.storage_service import get_storage_service
 from app.prompts import CHUNK_NOTES_SYSTEM_PROMPT, NOTES_COLLECTOR_SYSTEM_PROMPT
 from app.utils import create_simple_logger
 
@@ -18,15 +19,38 @@ logger = create_simple_logger(__name__)
 
 
 def save_final_notes_path(video_id: str) -> str:
+    """Returns local file path for temporary operations (e.g., PDF conversion)."""
     file_path = os.path.join(notes_dir, video_id, "final_notes.md")
     return file_path
 
 
-def save_final_notes(video_id: str, text: str) -> None:
+def save_final_notes(
+    video_id: str, text: str, username: str = None, run_id: str = None
+) -> None:
+    """Save final notes to local filesystem and optionally to MinIO storage."""
+    # Always save locally for PDF conversion
     file_path = save_final_notes_path(video_id=video_id)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "w") as file:
         file.write(text)
-    logger.info(f"Final notes saved at: {file_path}")
+    logger.info(f"Final notes saved locally at: {file_path}")
+
+    # Also save to MinIO if username is provided
+    if username:
+        try:
+            storage = get_storage_service()
+            storage.upload_notes(
+                username=username,
+                project_id=video_id,
+                filename="final_notes.md",
+                data=text,
+                run_id=run_id,
+            )
+            logger.info(
+                f"Final notes uploaded to MinIO for user '{username}', run '{run_id}'"
+            )
+        except Exception as e:
+            logger.error(f"Failed to upload final notes to MinIO: {e}")
 
 
 async def chunk_notes_agent(
@@ -43,6 +67,8 @@ async def chunk_notes_agent(
         chunk_idx=chunk_idx,
         total_chunks=runtime.context["num_chunks"],
         refresh_notes=refresh_notes,
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     if saved_note:
         return {"chunk_note": saved_note, "chunk_notes": [saved_note]}
@@ -60,6 +86,8 @@ async def chunk_notes_agent(
         chunk_idx=chunk_idx,
         text=chunk_note,
         note_type="raw",
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     return {"chunk_note": chunk_note, "chunk_notes": [chunk_note]}
 
@@ -87,6 +115,8 @@ async def notes_collector_agent(
         video_id=runtime.context["video_id"],
         note_type="final",
         refresh_notes=runtime.context.get("refresh_notes", False),
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     if collected_notes:
         return {"collected_notes": collected_notes}
@@ -109,5 +139,10 @@ async def notes_collector_agent(
 
     collected_notes = handle_llm_markdown_response(response)
     updated_notes = _update_image_links_in_final_notes(collected_notes)
-    save_final_notes(video_id=runtime.context["video_id"], text=updated_notes)
+    save_final_notes(
+        video_id=runtime.context["video_id"],
+        text=updated_notes,
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
+    )
     return {"collected_notes": updated_notes}

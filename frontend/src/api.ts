@@ -10,6 +10,15 @@ export const api = axios.create({
   },
 });
 
+// Add auth token to requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const endpoints = {
   uploads: {
     list: "/uploads/list",
@@ -29,8 +38,13 @@ export const endpoints = {
   downloads: {
     video: "/videos/download",
     videoStream: "/videos/download/stream",
-    file: (path: string, filename?: string) => `/files/download?path=${encodeURIComponent(path)}${filename ? `&filename=${encodeURIComponent(filename)}` : ""}`,
+    file: (projectId: string, artifactType: string, filename: string) => `/files/download?project_id=${encodeURIComponent(projectId)}&artifact_type=${encodeURIComponent(artifactType)}&filename=${encodeURIComponent(filename)}`,
   },
   // Ensure we match the backend routes structure
+  runs: {
+    list: (projectId: string) => `/run/project/${projectId}/runs`,
+    get: (projectId: string, runId: string) => `/run/project/${projectId}/runs/${runId}`,
+    setCurrent: (projectId: string, runId: string) => `/run/project/${projectId}/current-run?run_id=${runId}`,
+  },
   check_health: "/health",
 };

@@ -24,6 +24,8 @@ async def formatter_agent(
         chunk_idx=state["chunk_idx"],
         total_chunks=runtime.context["num_chunks"],
         refresh_notes=runtime.context.get("refresh_notes", False),
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     if formatted_text:
         return {"formatted_notes": [formatted_text]}
@@ -44,5 +46,7 @@ async def formatter_agent(
         chunk_idx=current_chunk,
         text=formatted_text,
         note_type="formatted",
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     return {"formatted_notes": [formatted_text]}

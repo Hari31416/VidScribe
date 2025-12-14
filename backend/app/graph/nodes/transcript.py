@@ -1,4 +1,13 @@
-from typing import Dict, List
+"""
+Transcript Processing Nodes for VidScribe.
+
+Handles fetching and processing video transcripts from:
+- YouTube Transcript API (for YouTube videos)
+- Local files
+- MinIO storage (for user-uploaded transcripts)
+"""
+
+from typing import Dict, List, Optional
 import os
 import json
 
@@ -22,6 +31,7 @@ __all__ = [
     "get_transcript",
     "get_srt_transcript",
     "get_raw_transcript",
+    "get_raw_transcript_from_storage",
     "convert_ms_to_srt_time",
     "extract_text_from_transcript_chunk",
 ]
@@ -113,28 +123,81 @@ def get_srt_transcript(
     return transcript_formatted
 
 
-def get_raw_transcript(
-    video_id: str,
-    languages: List[str] = ["en"],
-    preserve_formatting: bool = True,
-    overwrite: bool = False,
+def get_raw_transcript_from_storage(
+    username: str,
+    project_id: str,
 ) -> List[Dict[str, str | float]]:
-    """Gets the raw transcript data of a YouTube video.
+    """Gets the raw transcript data from MinIO storage.
 
     Parameters
     ----------
-    video_id : str
-        The YouTube video ID.
-    languages : list[str], optional
-        List of language codes to try, by default ["en"]
-    preserve_formatting : bool, optional
-        Whether to preserve formatting, by default True
+    username : str
+        The username who owns the project
+    project_id : str
+        The project ID
 
     Returns
     -------
     list[dict]
         The raw transcript data as a list of dictionaries.
     """
+    from app.services.storage_service import get_storage_service
+
+    storage = get_storage_service()
+
+    try:
+        transcript_bytes = storage.get_transcript(username, project_id)
+        if transcript_bytes is None:
+            raise ValueError(f"Transcript not found for project '{project_id}'")
+
+        transcript_data = json.loads(transcript_bytes.decode("utf-8"))
+        logger.info(
+            f"Loaded transcript from MinIO for user '{username}', project '{project_id}'"
+        )
+        return transcript_data
+    except Exception as e:
+        logger.error(f"Failed to load transcript from MinIO: {e}")
+        raise
+
+
+def get_raw_transcript(
+    video_id: str,
+    languages: List[str] = ["en"],
+    preserve_formatting: bool = True,
+    overwrite: bool = False,
+    username: Optional[str] = None,
+) -> List[Dict[str, str | float]]:
+    """Gets the raw transcript data of a YouTube video or from storage.
+
+    If username is provided, tries to fetch from MinIO storage first.
+    Falls back to local cache or YouTube API.
+
+    Parameters
+    ----------
+    video_id : str
+        The YouTube video ID or project ID.
+    languages : list[str], optional
+        List of language codes to try, by default ["en"]
+    preserve_formatting : bool, optional
+        Whether to preserve formatting, by default True
+    overwrite : bool, optional
+        Whether to overwrite cached data, by default False
+    username : str, optional
+        If provided, fetches from MinIO storage instead of YouTube
+
+    Returns
+    -------
+    list[dict]
+        The raw transcript data as a list of dictionaries.
+    """
+    # Try MinIO storage first if username is provided
+    if username:
+        try:
+            return get_raw_transcript_from_storage(username, video_id)
+        except Exception as e:
+            logger.warning(f"Could not load from MinIO, trying local/YouTube: {e}")
+
+    # Fall back to local cache
     raw_file = transcript_file_path(video_id, "json")
     if os.path.exists(raw_file) and not overwrite:
         with open(raw_file, "r", encoding="utf-8") as file:
@@ -142,6 +205,16 @@ def get_raw_transcript(
             logger.info(f"Loaded cached raw transcript for video ID: {video_id}")
             return raw_data
 
+    # Check if this is a known local project ID pattern
+    if video_id.startswith(("transcript_", "upload_", "proj_")):
+        error_msg = (
+            f"Project ID '{video_id}' appears to be local, but transcript was not found in storage. "
+            "Aborting YouTube API fetch."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    # Fetch from YouTube API
     transcript = get_transcript(video_id, languages, preserve_formatting)
     logger.debug(f"Returning raw transcript data for video ID: {video_id}")
     data = transcript.to_raw_data()

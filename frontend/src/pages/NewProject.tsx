@@ -14,7 +14,7 @@ import { YouTubeImport } from "@/components/YouTubeImport";
 export function NewProject() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const [projectId, setProjectId] = useState("");
+    const [projectName, setProjectName] = useState("");
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function NewProject() {
     const uploadMutation = useMutation({
         mutationFn: async () => {
             const formData = new FormData();
-            if (projectId) formData.append("video_id", projectId);
+            if (projectName) formData.append("project_name", projectName);
 
             // Determine endpoint based on files present
             if (videoFile && transcriptFile) {
@@ -54,11 +54,6 @@ export function NewProject() {
 
     const handleSubmit = () => {
         if (!transcriptFile) {
-            // setError("A transcript file is required.");
-            // We replaced error state with nothing or alert? 
-            // Since error var is removed, we just return or alert.
-            // But we can't alert without UI. 
-            // Let's just return for now as button is disabled anyway.
             return;
         }
         uploadMutation.mutate();
@@ -87,18 +82,18 @@ export function NewProject() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Project Details</CardTitle>
-                            <CardDescription>Define a unique ID for your project.</CardDescription>
+                            <CardDescription>Give your project a descriptive name.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="project-id">Project ID (Optional)</Label>
+                                <Label htmlFor="project-name">Project Name</Label>
                                 <Input
-                                    id="project-id"
-                                    placeholder="e.g. calculus_lecture_01"
-                                    value={projectId}
-                                    onChange={(e) => setProjectId(e.target.value)}
+                                    id="project-name"
+                                    placeholder="e.g. Calculus Lecture 1"
+                                    value={projectName}
+                                    onChange={(e) => setProjectName(e.target.value)}
                                 />
-                                <p className="text-xs text-muted-foreground">Leave blank to auto-generate.</p>
+                                <p className="text-xs text-muted-foreground">This name will be displayed on your dashboard.</p>
                             </div>
                         </CardContent>
                     </Card>
@@ -150,7 +145,8 @@ export function NewProject() {
                             // If we have a video ID, we successfully downloaded video.
                             // Now we need a transcript.
                             // Auto-set project ID to the downloaded video ID if possible or keep prompting.
-                            setProjectId(vidId);
+                            // Auto-set project name to the downloaded video ID if possible or keep prompting.
+                            setProjectName(vidId);
                             // Switch back to upload tab but maybe pre-fill some state?
                             // Actually, simpler flow: Stay in YouTube tab, show "Step 2: Upload Transcript"
                         }}

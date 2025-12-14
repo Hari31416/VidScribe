@@ -1,16 +1,30 @@
+"""
+Download Routes for VidScribe Backend.
+Provides endpoints for downloading files and triggering video downloads.
+All file downloads are proxied through the backend from MinIO.
+"""
+
 import asyncio
 import json
-import mimetypes
+import io
 from functools import partial
-from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
-from urllib.parse import quote
+from typing import Any, AsyncGenerator, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.services.auth import get_current_user
 from app.services.download_ytdlp import download_media
+from app.services.storage_service import (
+    get_storage_service,
+    ARTIFACT_VIDEOS,
+    ARTIFACT_FRAMES,
+    ARTIFACT_TRANSCRIPTS,
+    ARTIFACT_NOTES,
+    VALID_ARTIFACT_TYPES,
+)
+from app.services.database.project_database import get_project, update_project
 from app.utils import create_simple_logger
 
 videos_router = APIRouter(prefix="/videos", tags=["videos"])
@@ -18,9 +32,10 @@ files_router = APIRouter(prefix="/files", tags=["files"])
 
 logger = create_simple_logger(__name__)
 
-BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
-OUTPUTS_DIR = (BACKEND_ROOT / "outputs").resolve()
-mimetypes.add_type("text/markdown", ".md")
+
+# =============================================================================
+# Request/Response Models
+# =============================================================================
 
 
 class DownloadVideoRequest(BaseModel):
@@ -29,28 +44,143 @@ class DownloadVideoRequest(BaseModel):
         default=None,
         ge=144,
         le=4320,
-        description="Maximum height of the downloaded video in pixels. Defaults to provider's best.",
+        description="Maximum video height in pixels",
     )
-    audio_only: bool = Field(
-        default=False,
-        description="If true, download only audio and convert to audio_format.",
-    )
-    video_only: bool = Field(
-        default=False,
-        description="If true, download only the video stream without audio.",
-    )
-    audio_format: str = Field(
-        default="mp3",
-        description="Audio format to use when audio_only is true.",
-    )
-    overwrite: bool = Field(
-        default=False,
-        description="If false and the file already exists, skip downloading again.",
-    )
+    audio_only: bool = Field(default=False)
+    video_only: bool = Field(default=False)
+    audio_format: str = Field(default="mp3")
+    overwrite: bool = Field(default=False)
+
+
+# =============================================================================
+# File Download Endpoints (Proxied from MinIO)
+# =============================================================================
+
+
+@files_router.get("/download")
+async def download_file(
+    project_id: str = Query(..., description="Project ID"),
+    artifact_type: str = Query(
+        ..., description="Artifact type (videos, frames, transcripts, notes)"
+    ),
+    filename: str = Query(..., description="Filename to download"),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Download a file from a project's storage.
+    Files are streamed from MinIO through the backend.
+    """
+    username = current_user["username"]
+    storage = get_storage_service()
+
+    # Validate artifact type
+    if artifact_type not in VALID_ARTIFACT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid artifact_type. Must be one of: {VALID_ARTIFACT_TYPES}",
+        )
+
+    # Verify project belongs to user
+    project = get_project(username, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check if file exists
+    if not storage.file_exists(username, project_id, artifact_type, filename):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        # Download file from MinIO
+        file_bytes = storage.download_file(
+            username, project_id, artifact_type, filename
+        )
+
+        # Determine content type
+        content_type = "application/octet-stream"
+        if filename.endswith(".pdf"):
+            content_type = "application/pdf"
+        elif filename.endswith(".md"):
+            content_type = "text/markdown"
+        elif filename.endswith(".json"):
+            content_type = "application/json"
+        elif filename.endswith(".mp4"):
+            content_type = "video/mp4"
+        elif filename.endswith(".mp3"):
+            content_type = "audio/mpeg"
+        elif filename.endswith((".jpg", ".jpeg")):
+            content_type = "image/jpeg"
+        elif filename.endswith(".png"):
+            content_type = "image/png"
+
+        # Stream the file
+        return StreamingResponse(
+            io.BytesIO(file_bytes),
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(file_bytes)),
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Download failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Download failed")
+
+
+@files_router.get("/list")
+async def list_project_files(
+    project_id: str = Query(..., description="Project ID"),
+    artifact_type: Optional[str] = Query(None, description="Filter by artifact type"),
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    List files in a project's storage.
+    """
+    username = current_user["username"]
+    storage = get_storage_service()
+
+    # Verify project belongs to user
+    project = get_project(username, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if artifact_type:
+        if artifact_type not in VALID_ARTIFACT_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid artifact_type. Must be one of: {VALID_ARTIFACT_TYPES}",
+            )
+        files = storage.list_files(username, project_id, artifact_type)
+        return {
+            "project_id": project_id,
+            "artifact_type": artifact_type,
+            "files": files,
+        }
+
+    # List all artifact types
+    result = {"project_id": project_id, "files": {}}
+    for at in VALID_ARTIFACT_TYPES:
+        result["files"][at] = storage.list_files(username, project_id, at)
+
+    return result
+
+
+# =============================================================================
+# YouTube Video Download Endpoints
+# =============================================================================
 
 
 @videos_router.post("/download")
-async def download_video(req: DownloadVideoRequest) -> Dict[str, Any]:
+async def download_video(
+    req: DownloadVideoRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Download a video from YouTube and store it in the user's project.
+    """
+    username = current_user["username"]
+    storage = get_storage_service()
+
     if req.audio_only and req.video_only:
         raise HTTPException(
             status_code=400,
@@ -72,7 +202,7 @@ async def download_video(req: DownloadVideoRequest) -> Dict[str, Any]:
         result = await loop.run_in_executor(None, runner)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         logger.error("Video download failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Video download failed") from exc
 
@@ -81,43 +211,57 @@ async def download_video(req: DownloadVideoRequest) -> Dict[str, Any]:
         raise HTTPException(
             status_code=400, detail=result.get("error", "Download failed")
         )
-    if status not in {"success", "skipped"}:
-        raise HTTPException(status_code=500, detail="Unexpected download status")
 
-    files: List[str] = result.get("downloaded_files") or []
-    files_payload = []
-    for fp in files:
-        abs_path = str(Path(fp).resolve())
-        rel_path = _relative_to_outputs(abs_path)
-        files_payload.append(
-            {
-                "absolute_path": abs_path,
-                "relative_path": rel_path,
-                "download_url": _build_download_url(rel_path),
-            }
+    # Upload downloaded files to MinIO
+    downloaded_files = result.get("downloaded_files", [])
+    uploaded_keys = []
+
+    for file_path in downloaded_files:
+        try:
+            from pathlib import Path
+
+            p = Path(file_path)
+            key = storage.upload_file_from_path(
+                username,
+                req.video_id,
+                ARTIFACT_VIDEOS,
+                str(p),
+                p.name,
+            )
+            uploaded_keys.append(key)
+        except Exception as e:
+            logger.warning(f"Failed to upload {file_path} to MinIO: {e}")
+
+    # Create or update project
+    from app.services.database.project_database import project_exists, create_project
+
+    if not project_exists(username, req.video_id):
+        create_project(
+            user_id=username,
+            project_id=req.video_id,
+            name=req.video_id,
+            has_video=True,
+            has_transcript=False,
         )
-
-    output_dir = result.get("output_dir")
-    output_dir_abs = str(Path(output_dir).resolve()) if output_dir else None
-    output_dir_rel = _relative_to_outputs(output_dir_abs) if output_dir_abs else None
+    else:
+        update_project(username, req.video_id, {"has_video": True})
 
     return {
         "status": status,
-        "video_id": req.video_id,
-        "count": result.get("count", len(files_payload)),
-        "audio_only": req.audio_only,
-        "video_only": req.video_only,
-        "resolution": req.resolution,
-        "output_dir": {
-            "absolute": output_dir_abs,
-            "relative": output_dir_rel,
-        },
-        "files": files_payload,
+        "project_id": req.video_id,
+        "count": len(uploaded_keys),
+        "files": uploaded_keys,
     }
 
 
 @videos_router.post("/download/stream")
-async def download_video_stream(req: DownloadVideoRequest) -> StreamingResponse:
+async def download_video_stream(
+    req: DownloadVideoRequest,
+    current_user: dict = Depends(get_current_user),
+) -> StreamingResponse:
+    """
+    Download video with streaming progress updates (SSE).
+    """
     if req.audio_only and req.video_only:
         raise HTTPException(
             status_code=400,
@@ -153,10 +297,8 @@ async def download_video_stream(req: DownloadVideoRequest) -> StreamingResponse:
                     "result": result,
                 }
             )
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.error(
-                "Video download failed during streaming: %s", exc, exc_info=True
-            )
+        except Exception as exc:
+            logger.error("Video download failed: %s", exc, exc_info=True)
             await queue.put({"status": "error", "error": str(exc)})
         finally:
             await queue.put(None)
@@ -168,72 +310,6 @@ async def download_video_stream(req: DownloadVideoRequest) -> StreamingResponse:
             payload = await queue.get()
             if payload is None:
                 break
-            yield _to_sse(payload)
+            yield f"event: progress\ndata: {json.dumps(payload)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@files_router.get("/download")
-async def download_file(
-    path: str = Query(
-        ..., description="Path to file relative to the backend outputs directory."
-    ),
-    filename: Optional[str] = Query(
-        None, description="Optional custom filename for the downloaded file."
-    ),
-):
-    resolved_path = _resolve_requested_path(path)
-    media_type, _ = mimetypes.guess_type(str(resolved_path))
-
-    # Use provided filename or default to the actual file name
-    download_filename = filename or resolved_path.name
-
-    return FileResponse(
-        resolved_path,
-        media_type=media_type or "application/octet-stream",
-        filename=download_filename,
-    )
-
-
-def _relative_to_outputs(path: str) -> Optional[str]:
-    try:
-        resolved = Path(path).resolve()
-        return str(resolved.relative_to(OUTPUTS_DIR))
-    except (ValueError, RuntimeError):
-        return None
-
-
-def _build_download_url(relative_path: Optional[str]) -> Optional[str]:
-    if not relative_path:
-        return None
-    return f"/files/download?path={quote(relative_path)}"
-
-
-def _resolve_requested_path(path: str) -> Path:
-    candidate = Path(path)
-    if not candidate.is_absolute():
-        parts = candidate.parts
-        if parts and parts[0] == OUTPUTS_DIR.name:
-            candidate = Path(*parts[1:]) if len(parts) > 1 else Path(".")
-        candidate = OUTPUTS_DIR / candidate
-    try:
-        resolved = candidate.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="File not found") from exc
-
-    try:
-        resolved.relative_to(OUTPUTS_DIR)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="Requested path is outside of the allowed outputs directory.",
-        ) from exc
-
-    if not resolved.is_file():
-        raise HTTPException(status_code=400, detail="Requested path is not a file")
-
-    return resolved
-
-
-def _to_sse(event: Dict[str, Any]) -> str:
-    return f"event: progress\n" f"data: {json.dumps(event, ensure_ascii=False)}\n\n"

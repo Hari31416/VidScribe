@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 PYTHON ?= python3
 UVICORN ?= uvicorn
-UVICORN_APP ?= fastapi_app:app
+UVICORN_APP ?= main:app
 UVICORN_OPTS ?= --host 0.0.0.0 --port 8000 --reload
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
@@ -15,7 +15,8 @@ LOGS_DIR := logs
 PID_DIR := $(LOGS_DIR)
 
 .PHONY: install backend-install frontend-install build backend-build frontend-build \
-	run backend-run frontend-run clean stop backend-stop frontend-stop logs ensure-logs-dir
+	run backend-run frontend-run clean stop backend-stop frontend-stop logs ensure-logs-dir \
+	up down dc-logs
 
 install: backend-install frontend-install
 
@@ -124,4 +125,25 @@ clean:
 	rm -rf $(FRONTEND_DIR)/node_modules $(FRONTEND_DIR)/dist
 	rm -rf $(LOGS_DIR)
 
+# =============================================================================
+# Docker Compose Services (MinIO + MongoDB)
+# =============================================================================
 
+up:
+	@echo "Starting MinIO and MongoDB services..."
+	docker compose up -d
+	@echo ""
+	@echo "✓ Services started"
+	@echo "  MinIO API:     http://localhost:9000"
+	@echo "  MinIO Console: http://localhost:9001"
+	@echo "  MongoDB:       localhost:27018"
+
+# Stop infrastructure services
+down:
+	@echo "Stopping services..."
+	docker compose down
+	@echo "✓ Services stopped"
+
+# View docker compose logs
+dc-logs:
+	docker compose logs -f

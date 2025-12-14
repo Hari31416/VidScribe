@@ -137,6 +137,8 @@ class RuntimeState(TypedDict):
     provider: str = "google"
     model: str = "gemini-2.0-flash"
     video_id: str
+    username: str  # User who owns this project (for storage isolation)
+    run_id: str  # Run ID for notes versioning
     video_path: Optional[str] = None  # Optional for transcript-only uploads
     num_chunks: int = 2
     refresh_notes: bool = False

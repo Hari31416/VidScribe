@@ -29,6 +29,9 @@ export function StorageStatsCard({ videoId }: StorageStatsCardProps) {
     if (isLoading) return <Card className="h-[200px] flex items-center justify-center"><Loader2 className="animate-spin" /></Card>;
     if (error || !data) return null;
 
+    // Ensure breakdown exists with fallback
+    const breakdown = data.breakdown || {};
+
     const getPercent = (val: number) => {
         if (data.total_size_mb === 0) return 0;
         return Math.min(100, Math.max(0, (val / data.total_size_mb) * 100));
@@ -42,7 +45,7 @@ export function StorageStatsCard({ videoId }: StorageStatsCardProps) {
                     Storage Usage
                 </CardTitle>
                 <CardDescription>
-                    Total Project Size: <span className="font-bold text-foreground">{data.breakdown["Total"] || `${data.total_size_mb} MB`}</span>
+                    Total Project Size: <span className="font-bold text-foreground">{breakdown["Total"] || `${data.total_size_mb} MB`}</span>
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -59,22 +62,22 @@ export function StorageStatsCard({ videoId }: StorageStatsCardProps) {
                     <div className="flex items-center gap-2">
                         <Video className="w-4 h-4 text-blue-500" />
                         <span className="text-muted-foreground">Video:</span>
-                        <span className="font-mono ml-auto">{data.breakdown["Video"]}</span>
+                        <span className="font-mono ml-auto">{breakdown["Video"] || "0 MB"}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <ImageIcon className="w-4 h-4 text-purple-500" />
                         <span className="text-muted-foreground">Frames:</span>
-                        <span className="font-mono ml-auto">{data.breakdown["Frames"]}</span>
+                        <span className="font-mono ml-auto">{breakdown["Frames"] || "0 MB"}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-green-500" />
                         <span className="text-muted-foreground">Notes:</span>
-                        <span className="font-mono ml-auto">{data.breakdown["Notes"]}</span>
+                        <span className="font-mono ml-auto">{breakdown["Notes"] || "0 MB"}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <Database className="w-4 h-4 text-yellow-500" />
                         <span className="text-muted-foreground">Transcript:</span>
-                        <span className="font-mono ml-auto">{data.breakdown["Transcript"]}</span>
+                        <span className="font-mono ml-auto">{breakdown["Transcript"] || "0 MB"}</span>
                     </div>
                 </div>
             </CardContent>

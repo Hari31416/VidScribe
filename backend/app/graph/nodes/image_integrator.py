@@ -110,6 +110,8 @@ async def timestamp_generator_agent(
         chunk_idx=state["chunk_idx"],
         total_chunks=runtime.context.get("total_chunks"),
         refresh_json=runtime.context.get("refresh_notes", False),
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     if timestamps:
         timestamps = [Timestamp(**ts) for ts in timestamps.get("timestamps", [])]
@@ -138,6 +140,8 @@ async def timestamp_generator_agent(
             chunk_idx=state["chunk_idx"],
             data=response.model_dump(),
             json_type="timestamps",
+            username=runtime.context.get("username"),
+            run_id=runtime.context.get("run_id"),
         )
         return {
             "timestamps": response.timestamps,
@@ -169,6 +173,8 @@ async def timestamp_generator_agent(
             chunk_idx=state["chunk_idx"],
             data=parsed.model_dump(),
             json_type="timestamps",
+            username=runtime.context.get("username"),
+            run_id=runtime.context.get("run_id"),
         )
         return {
             "timestamps": parsed.timestamps,
@@ -229,6 +235,8 @@ async def image_insertion_generation_agent(
         chunk_idx=state["chunk_idx"],
         total_chunks=runtime.context.get("total_chunks"),
         refresh_json=runtime.context.get("refresh_notes", False),
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     if image_insertions:
         image_insertions = [
@@ -262,6 +270,8 @@ async def image_insertion_generation_agent(
             chunk_idx=state["chunk_idx"],
             data=response.model_dump(),
             json_type="image_insertions",
+            username=runtime.context.get("username"),
+            run_id=runtime.context.get("run_id"),
         )
         return {
             "image_insertions": response.image_insertions,
@@ -292,6 +302,8 @@ async def image_insertion_generation_agent(
             chunk_idx=state["chunk_idx"],
             data=parsed.model_dump(),
             json_type="image_insertions",
+            username=runtime.context.get("username"),
+            run_id=runtime.context.get("run_id"),
         )
         return {
             "image_insertions": parsed.image_insertions,
@@ -381,6 +393,8 @@ async def image_integrator_agent(
         chunk_idx=state["chunk_idx"],
         note_type="integrated",
         refresh_notes=runtime.context.get("refresh_notes", False),
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
 
     if image_integrated_notes:
@@ -424,6 +438,8 @@ async def image_integrator_agent(
         chunk_idx=state["chunk_idx"],
         text=image_integrated_notes,
         note_type="integrated",
+        username=runtime.context.get("username"),
+        run_id=runtime.context.get("run_id"),
     )
     logger.info("Integrated images into chunk notes.")
     return {

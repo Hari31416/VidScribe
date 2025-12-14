@@ -11,47 +11,55 @@ VidScribe is an AI-powered tool that turns videos into **structured, markdown-st
 
 ## 🛠️ Tech Stack
 
-- **Backend / Orchestration**: Python, FastAPI (future), LangGraph
-- **LLM**: OpenAI (or other LLMs)
+- **Backend / Orchestration**: Python, FastAPI, LangGraph
+- **LLM**: OpenAI, Google Gemini (or other LLMs)
 - **Transcript**: YouTube Transcript API / VTT / SRT / JSON
 - **Video Frames**: ffmpeg / OpenCV + CLIP (optional filtering)
-- **Frontend**: React
+- **Frontend**: React (Vite + TypeScript)
+- **Storage**: MinIO (S3-compatible object storage)
+- **Database**: MongoDB (metadata and user management)
+- **Auth**: JWT token-based with RBAC (admin/user roles)
 
-## 📂 Planned Project Structure (MVP)
+## 🏗️ Infrastructure Setup
 
-In the `backend/` folder:
+VidScribe uses MinIO for object storage and MongoDB for metadata. Use Docker Compose to start the services:
 
 ```bash
-VidScribe/
-│── app/
-│   ├── main.py               # Gradio entrypoint
-│   ├── graph/
-│   │   ├── langgraph.py      # Graph assembly
-│   │   └── nodes/            # Individual pipeline nodes
-│   │       ├── transcript.py
-│   │       ├── chunker.py
-│   │       ├── notes_agent.py
-│   │       ├── summary_agent.py
-│   │       ├── frame_extractor.py
-│   │       └── formatter.py
-│── outputs/                  # Generated notes & images
-│   ├── notes.md
-│   ├── summary.md
-│   └── images/
-│── requirements.txt
-│── README.md
+# Start MinIO and MongoDB services
+docker-compose up -d minio mongodb
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
 ```
 
-## 📅 Development Plan
+**Service Details:**
+- **MinIO**: http://localhost:9000 (API), http://localhost:9001 (Console)
+  - Default credentials: `minioadmin` / `minioadmin`
+- **MongoDB**: localhost:27018
+  - Default credentials: `admin` / `password`
 
-- **Weekend 1**: Transcript → Structured Notes (MVP text only).
-- **Weekend 2**: Add image extraction + integrate into notes.
-- **Weekend 3**: Add summary + polish Gradio app.
-- **Weekend 4+**: Move to full FastAPI + React app.
+Data is persisted in `./volumes/` directory.
+
+### Environment Configuration
+
+Copy the example environment file and configure as needed:
+
+```bash
+cd backend
+cp .env.example .env
+# Edit .env with your settings
+```
+
+Key environment variables:
+- `S3_ENDPOINT_URL`: MinIO endpoint (default: http://localhost:9000)
+- `MONGO_URI`: MongoDB connection string (default: mongodb://admin:password@localhost:27018)
+- `SECRET_KEY`: JWT secret key (change in production!)
+- `ADMIN_PASSWORD`: Initial admin user password
 
 ## 🧪 FastAPI (API) Quickstart
-
-A minimal FastAPI server is available alongside the Gradio app with endpoints including:
 
 - POST /run/stream — live progress via Server-Sent Events (SSE)
 - POST /run/final — run to completion and return the final result as JSON

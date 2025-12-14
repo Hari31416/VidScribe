@@ -35,3 +35,13 @@ pydantic==2.11.9
 # API Server
 fastapi==0.116.1
 uvicorn==0.35.0
+python-multipart
+
+# Storage & Database
+boto3==1.42.9
+pymongo==4.15.5
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1

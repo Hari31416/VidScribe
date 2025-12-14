@@ -1,15 +1,33 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, FileVideo, PlusCircle } from "lucide-react";
+import React from "react";
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { LayoutDashboard, FileVideo, PlusCircle, Shield, LogOut } from "lucide-react";
 import { cn } from "@/utils";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
+import { ModeToggle } from "@/components/mode-toggle";
 
-export function Layout() {
+interface LayoutProps {
+    children?: React.ReactNode;
+}
+
+export function Layout({ children }: LayoutProps) {
     const location = useLocation();
+    const navigate = useNavigate();
+    const { isAdmin, logout, user } = useAuth();
 
     const navItems = [
         { icon: LayoutDashboard, label: "Dashboard", href: "/" },
         { icon: PlusCircle, label: "New Project", href: "/new" },
     ];
+
+    if (isAdmin) {
+        navItems.push({ icon: Shield, label: "Admin", href: "/admin" });
+    }
+
+    const handleLogout = () => {
+        logout();
+        navigate("/login");
+    };
 
     return (
         <div className="min-h-screen bg-background font-sans antialiased flex">
@@ -41,7 +59,23 @@ export function Layout() {
                     ))}
                 </nav>
 
-                <div className="p-4 border-t">
+                <div className="p-4 border-t space-y-4">
+                    <div className="flex items-center justify-between px-2">
+                        <span className="text-sm font-medium truncate max-w-[120px]" title={user?.username}>
+                            {user?.username}
+                        </span>
+                        <ModeToggle />
+                    </div>
+
+                    <Button
+                        variant="ghost"
+                        className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={handleLogout}
+                    >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                    </Button>
+
                     <p className="text-xs text-muted-foreground text-center">
                         v0.1.0 Beta
                     </p>
@@ -51,7 +85,7 @@ export function Layout() {
             {/* Main Content */}
             <main className="flex-1 overflow-auto">
                 <div className="h-full">
-                    <Outlet />
+                    {children || <Outlet />}
                 </div>
             </main>
         </div>

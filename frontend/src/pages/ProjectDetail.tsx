@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Play, RotateCcw, AlertTriangle, CheckCircle, Loader2, FileText, ChevronDown, ChevronRight } from "lucide-react";
+import { Play, RotateCcw, AlertTriangle, CheckCircle, Loader2, FileText, ChevronDown, ChevronRight, History, Clock } from "lucide-react";
 
 import { api, endpoints } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,9 @@ import { LogViewer } from "@/components/LogViewer";
 import { NotesViewer } from "@/components/NotesViewer";
 import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 import { StorageStatsCard } from "@/components/StorageStatsCard";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/utils";
+import { formatDistanceToNow } from "date-fns";
 
 export function ProjectDetail() {
     const { videoId } = useParams<{ videoId: string }>();
@@ -24,17 +26,41 @@ export function ProjectDetail() {
     const [progressMessage, setProgressMessage] = useState("");
     const [counters, setCounters] = useState<Record<string, number>>({});
     const [isLogsOpen, setIsLogsOpen] = useState(false);
+    const [currentRunId, setCurrentRunId] = useState<string | null>(null);
 
     // Check project status
-    const { data: projectData, isLoading, error } = useQuery({
+    const { data: projectData, isLoading, error, refetch: refetchProject } = useQuery({
         queryKey: ["project", videoId],
         queryFn: async () => {
             const res = await api.get(endpoints.uploads.check(videoId!));
             return res.data;
         },
-        enabled: !!videoId,
+        enabled: !!videoId && videoId !== "undefined",
         retry: false,
     });
+
+    // Fetch runs
+    const { data: runsData = [], refetch: refetchRuns } = useQuery({
+        queryKey: ["runs", videoId],
+        queryFn: async () => {
+            if (!videoId) return [];
+            try {
+                const res = await api.get(endpoints.runs.list(videoId));
+                return res.data;
+            } catch (err) {
+                console.warn("Failed to fetch runs:", err);
+                return [];
+            }
+        },
+        enabled: !!videoId && videoId !== "undefined",
+    });
+
+    // Set initial run ID when project loads
+    useEffect(() => {
+        if (projectData?.current_run_id && !currentRunId) {
+            setCurrentRunId(projectData.current_run_id);
+        }
+    }, [projectData, currentRunId]);
 
     const [config, setConfig] = useState({
         provider: "google",
@@ -59,6 +85,13 @@ export function ProjectDetail() {
         }
     };
 
+    const handleRunChange = async (runId: string) => {
+        setCurrentRunId(runId);
+        // Optionally update current run on backend
+        // await api.put(endpoints.runs.setCurrent(videoId!, runId));
+        // refetchProject();
+    };
+
     const handleRun = async () => {
         if (!videoId) return;
         setIsRunning(true);
@@ -75,10 +108,12 @@ export function ProjectDetail() {
         try {
             const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/run/stream`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token") || ""}`
+                },
                 body: JSON.stringify({
-                    video_id: videoId,
-                    video_path: projectData.video_files && projectData.video_files.length > 0 ? projectData.video_files[0] : null,
+                    project_id: videoId,
                     num_chunks: config.numChunks,
                     provider: config.provider === "custom" ? "litellm" : config.provider,
                     model: config.model,
@@ -101,6 +136,8 @@ export function ProjectDetail() {
 
             if (!reader) throw new Error("No reader");
 
+            let newRunId = null;
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -110,11 +147,16 @@ export function ProjectDetail() {
                     if (line.startsWith("data: ")) {
                         try {
                             const data = JSON.parse(line.slice(6));
-                            // setLogs(prev => [...prev, JSON.stringify(data)]); // Too verbose to log all data
+
+                            // Capture new run ID if emitted
+                            if (data.run_id && !newRunId) {
+                                newRunId = data.run_id;
+                                setCurrentRunId(newRunId);
+                            }
 
                             // Update progress
                             if (typeof data.progress === 'number') {
-                                setProgress(Math.round(data.progress * 100));
+                                setProgress(data.progress);
                             }
                             if (data.message) {
                                 setProgressMessage(data.message);
@@ -129,6 +171,8 @@ export function ProjectDetail() {
                                 setIsRunning(false);
                                 setProgress(100);
                                 setProgressMessage("Pipeline Completed Successfully");
+                                refetchProject();
+                                refetchRuns();
                             }
                             if (data.phase === "error" || data.event === "error" || data.status === "failed") {
                                 setRunStatus("error");
@@ -173,12 +217,35 @@ export function ProjectDetail() {
         )
     }
 
+
+
+    // Note: Paths are now constructed directly in the download button onClick handlers using videoId and currentRunId
+
+    const handleDownload = async (url: string, filename: string) => {
+        try {
+            const response = await api.get(url, { responseType: 'blob' });
+            const blob = new Blob([response.data], { type: response.headers['content-type'] });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            console.error("Download failed:", error);
+            alert("Failed to download file. Please try again.");
+        }
+    };
+
     return (
         <div className="container mx-auto p-6 space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">{videoId}</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">{projectData.name || videoId}</h1>
                     <div className="flex items-center gap-2 mt-2">
+                        <span className="text-muted-foreground text-sm font-mono bg-muted/50 px-2 py-0.5 rounded">ID: {videoId}</span>
                         {projectData.video_exists && <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Video</span>}
                         {projectData.transcript_exists && <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Transcript</span>}
                     </div>
@@ -226,7 +293,6 @@ export function ProjectDetail() {
                                             onChange={(e) => {
                                                 const p = e.target.value;
                                                 let m = config.model;
-                                                // Reset model to default when provider changes
                                                 if (p === "google") m = "gemini-2.0-flash";
                                                 if (p === "openrouter") m = "openai/gpt-oss-120b";
                                                 if (p === "custom") m = "";
@@ -318,7 +384,6 @@ export function ProjectDetail() {
                                         )}
                                     </div>
                                 </div>
-
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">User Feedback / Instructions (Optional)</label>
                                     <textarea
@@ -333,7 +398,6 @@ export function ProjectDetail() {
                                         These instructions will be sent to the LLM when generating final notes and summary.
                                     </p>
                                 </div>
-
                                 <div className="space-y-4 pt-4 border-t">
                                     <div className="space-y-2">
                                         <div className="flex justify-between text-sm">
@@ -346,17 +410,31 @@ export function ProjectDetail() {
                                     {Object.keys(counters).length > 0 && (
                                         <div className="flex gap-4 flex-wrap text-sm">
                                             {Object.entries(counters).map(([key, value]) => {
-                                                // Safely render value, detecting if it is an object (like usage stats)
                                                 let displayValue: string | number = "";
                                                 if (typeof value === "object" && value !== null) {
-                                                    // If it's an object, try to render a sensible summary or stringify
-                                                    // Example: {current: 10, total: 100} -> "10 / 100"
-                                                    // Unknown object -> JSON.stringify
                                                     const obj = value as any;
+                                                    // Handle {current, total} format
                                                     if (obj.current !== undefined && obj.total !== undefined) {
                                                         displayValue = `${obj.current} / ${obj.total}`;
-                                                    } else {
-                                                        displayValue = JSON.stringify(value);
+                                                    }
+                                                    // Handle {current_items, total_chunks} format
+                                                    else if (obj.current_items !== undefined && obj.total_chunks !== undefined) {
+                                                        displayValue = `${obj.chunks_completed || 0} / ${obj.total_chunks}`;
+                                                    }
+                                                    // Handle boolean status objects (finalization)
+                                                    else if (Object.values(obj).every(v => typeof v === "boolean")) {
+                                                        const completed = Object.values(obj).filter(v => v === true).length;
+                                                        const total = Object.keys(obj).length;
+                                                        displayValue = `${completed} / ${total}`;
+                                                    }
+                                                    // Handle count objects (notes_by_type)
+                                                    else if (Object.values(obj).every(v => typeof v === "number")) {
+                                                        const total = Object.values(obj).reduce((a, b) => (a as number) + (b as number), 0);
+                                                        displayValue = `${total}`;
+                                                    }
+                                                    // Fallback: just show count of keys
+                                                    else {
+                                                        displayValue = `${Object.keys(obj).length} items`;
                                                     }
                                                 } else {
                                                     displayValue = value;
@@ -398,54 +476,99 @@ export function ProjectDetail() {
                 <TabsContent value="results">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Generated Artifacts</CardTitle>
-                            <CardDescription>Download your processing results here.</CardDescription>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <CardTitle>Generated Artifacts</CardTitle>
+                                    <CardDescription>Download your processing results here.</CardDescription>
+                                </div>
+                                {runsData && runsData.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        <History className="w-4 h-4 text-muted-foreground" />
+                                        <Select value={currentRunId || ""} onValueChange={handleRunChange}>
+                                            <SelectTrigger className="w-[200px]">
+                                                <SelectValue placeholder="Select version" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {runsData.map((run: any) => (
+                                                    <SelectItem key={run.run_id} value={run.run_id}>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium">Version {run.run_id.substring(0, 6)}</span>
+                                                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                                <Clock className="w-3 h-3" />
+                                                                {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}
+                                                            </span>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("transcripts/" + videoId + ".json", videoId + "_transcript.json")}`, "_blank")}>
-                                    <FileText className="mr-2 h-4 w-4" /> Transcript (JSON)
-                                </Button>
-                                {projectData.outputs?.final_notes_md && (
-                                    <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/final_notes.md", videoId + "_final_notes.md")}`, "_blank")}>
-                                        <FileText className="mr-2 h-4 w-4" /> Final Notes (Markdown)
+                                {projectData.has_transcript && (
+                                    <Button variant="outline" className="justify-start" onClick={() => handleDownload(endpoints.downloads.file(videoId!, "transcripts", "transcript.json"), `${videoId}_transcript.json`)}>
+                                        <FileText className="mr-2 h-4 w-4" /> Transcript (JSON)
                                     </Button>
                                 )}
-                                {projectData.outputs?.final_notes_pdf && (
-                                    <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/final_notes.pdf", videoId + "_final_notes.pdf")}`, "_blank")}>
-                                        <FileText className="mr-2 h-4 w-4" /> Final Notes (PDF)
-                                    </Button>
-                                )}
-                                {projectData.outputs?.summary_md && (
-                                    <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/summary.md", videoId + "_summary.md")}`, "_blank")}>
-                                        <FileText className="mr-2 h-4 w-4" /> Summary (Markdown)
-                                    </Button>
-                                )}
+
+                                {/* Only show download buttons if current run has artifacts */}
+                                {currentRunId && (() => {
+                                    // Fallback: Always show buttons if run exists, as metadata might be missing on older runs
+                                    // We can try to use flags if available, but default to showing for now to avoid hiding available files.
+                                    // const selectedRun = (runsData || []).find((r: any) => r.run_id === currentRunId);
+                                    // const files = selectedRun?.notes_files || {};
+
+                                    return (
+                                        <>
+                                            <Button variant="outline" className="justify-start" onClick={() => handleDownload(endpoints.downloads.file(videoId!, "notes", `${currentRunId}/final_notes.md`), `${videoId}_final_notes.md`)}>
+                                                <FileText className="mr-2 h-4 w-4" /> Final Notes (Markdown)
+                                            </Button>
+                                            <Button variant="outline" className="justify-start" onClick={() => handleDownload(endpoints.downloads.file(videoId!, "notes", `${currentRunId}/final_notes.pdf`), `${videoId}_final_notes.pdf`)}>
+                                                <FileText className="mr-2 h-4 w-4" /> Final Notes (PDF)
+                                            </Button>
+                                            <Button variant="outline" className="justify-start" onClick={() => handleDownload(endpoints.downloads.file(videoId!, "notes", `${currentRunId}/summary.md`), `${videoId}_summary.md`)}>
+                                                <FileText className="mr-2 h-4 w-4" /> Summary (Markdown)
+                                            </Button>
+                                        </>
+                                    );
+                                })()}
                             </div>
 
-                            <div className="mt-8">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-lg font-semibold">Preview</h3>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            variant={previewMode === "final" ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={() => setPreviewMode("final")}
-                                        >
-                                            Final Notes
-                                        </Button>
-                                        <Button
-                                            variant={previewMode === "summary" ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={() => setPreviewMode("summary")}
-                                        >
-                                            Summary
-                                        </Button>
+                            {currentRunId ? (
+                                <div className="mt-8">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold">Preview: {currentRunId.substring(0, 8)}</h3>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant={previewMode === "final" ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => setPreviewMode("final")}
+                                            >
+                                                Final Notes
+                                            </Button>
+                                            <Button
+                                                variant={previewMode === "summary" ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => setPreviewMode("summary")}
+                                            >
+                                                Summary
+                                            </Button>
+                                        </div>
                                     </div>
+                                    <NotesViewer
+                                        projectId={videoId || ""}
+                                        artifactType="notes"
+                                        filename={previewMode === "final" ? `${currentRunId}/final_notes.md` : `${currentRunId}/summary.md`}
+                                    />
                                 </div>
-                                <NotesViewer path={previewMode === "final" ? `notes/${videoId}/final_notes.md` : `notes/${videoId}/summary.md`} />
-                                {/* Optional: could show empty state if file doesn't exist, but NotesViewer handles 404s gracefully */}
-                            </div>
+                            ) : (
+                                <div className="mt-8 text-center py-12 border rounded-lg bg-muted/20">
+                                    <p className="text-muted-foreground">Run the pipeline to generate notes.</p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
