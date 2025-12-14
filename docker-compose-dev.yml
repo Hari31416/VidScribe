@@ -1,0 +1,38 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: vidscribe-minio
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - ./volumes/minio:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb:
+    image: mongo:latest
+    container_name: vidscribe-mongodb
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - ./volumes/mongodb:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  minio_data:
+  mongodb_data:

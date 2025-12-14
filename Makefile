@@ -131,7 +131,7 @@ clean:
 
 up:
 	@echo "Starting MinIO and MongoDB services..."
-	docker compose up -d
+	docker compose -f docker-compose-dev.yml up -d
 	@echo ""
 	@echo "✓ Services started"
 	@echo "  MinIO API:     http://localhost:9000"
@@ -141,9 +141,9 @@ up:
 # Stop infrastructure services
 down:
 	@echo "Stopping services..."
-	docker compose down
+	docker compose -f docker-compose-dev.yml down
 	@echo "✓ Services stopped"
 
 # View docker compose logs
 dc-logs:
-	docker compose logs -f
+	docker compose -f docker-compose-dev.yml logs -f

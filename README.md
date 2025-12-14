@@ -1,438 +1,431 @@
-# 📚 VidScribe
+# 🎬 VidScribe
 
-VidScribe is an AI-powered tool that turns videos into **structured, markdown-style notes** with optional **images extracted from the video**. It helps people who understand better through written content but struggle to retain knowledge from videos.
+**AI-Powered Video Transcript to Notes Generator**
 
-## 🚀 Project Goals
+VidScribe is a full-stack application that transforms video transcripts into comprehensive, well-formatted notes using LangGraph-based AI pipelines. It supports YouTube video import, multiple transcript formats, frame extraction for visual context, and exports to PDF.
 
-- Convert **video transcripts** into clean, well-structured notes.
-- Enrich notes with **key frames/images** from the video.
-- Provide an **optional summary** for quick review.
-- Simple React frontend for easy interaction.
+![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.116-009688?logo=fastapi)
+![LangGraph](https://img.shields.io/badge/LangGraph-0.6-purple)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)
+
+---
+
+## ✨ Features
+
+### 📝 Notes Generation
+- **AI-Powered Processing**: Multi-agent LangGraph pipeline for intelligent note generation
+- **Chunk-Based Processing**: Splits transcripts into manageable chunks for quality output
+- **Image Integration**: Automatically extracts key frames from videos and integrates them into notes
+- **Smart Summarization**: Generates executive summaries of the full content
+- **PDF Export**: Export notes and summaries as formatted PDF documents
+
+### 🎥 Video & Transcript Support
+- **YouTube Import**: Download videos and transcripts directly via yt-dlp
+- **Multiple Formats**: Supports VTT, SRT, and JSON transcript uploads
+- **Transcript-Only Mode**: Process transcripts without video for faster, text-only notes
+- **Frame Extraction**: OpenCV-powered frame extraction at key timestamps
+
+### 🔐 User Management
+- **JWT Authentication**: Secure token-based authentication
+- **User Projects**: Each user has isolated project storage
+- **Admin Dashboard**: User management and system overview
+
+### 🌐 Multi-Provider LLM Support
+- **Google Gemini**: Default provider with Gemini 2.0 Flash
+- **OpenAI**: GPT-4 and GPT-3.5 support
+- **Groq**: Fast inference with Llama models
+- **NVIDIA AI Endpoints**: Enterprise-grade inference
+
+### 📡 Real-Time Progress
+- **Server-Sent Events (SSE)**: Live progress streaming to frontend
+- **Phase Tracking**: Monitor each stage of the pipeline
+- **Detailed Counters**: Track chunks, notes, and image processing progress
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    subgraph Client["Frontend (React + Vite)"]
+        UI[Web Interface]
+        Auth[Authentication]
+        Dashboard[Project Dashboard]
+        Viewer[Notes Viewer]
+    end
+
+    subgraph API["Backend (FastAPI)"]
+        Routes[API Routes]
+        AuthService[Auth Service]
+        Pipeline[LangGraph Pipeline]
+        Storage[Storage Service]
+    end
+
+    subgraph LLM["LLM Providers"]
+        Google[Google Gemini]
+        OpenAI[OpenAI GPT]
+        Groq[Groq]
+        NVIDIA[NVIDIA AI]
+    end
+
+    subgraph Infrastructure["Infrastructure"]
+        MinIO[(MinIO<br/>Object Storage)]
+        MongoDB[(MongoDB<br/>Database)]
+    end
+
+    UI --> Routes
+    Auth --> AuthService
+    Dashboard --> Routes
+    Viewer --> Routes
+    
+    Routes --> Pipeline
+    Routes --> Storage
+    Pipeline --> Google & OpenAI & Groq & NVIDIA
+    
+    Storage --> MinIO
+    AuthService --> MongoDB
+    Routes --> MongoDB
+```
+
+---
+
+## 🔄 Notes Generation Pipeline
+
+The core of VidScribe is a LangGraph-based multi-agent pipeline:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User
+    participant API as FastAPI
+    participant Graph as LangGraph Pipeline
+    participant LLM as LLM Provider
+    participant Storage as MinIO
+
+    User->>API: Start Pipeline (project_id, config)
+    API->>Graph: Initialize Pipeline
+    
+    rect rgb(240, 248, 255)
+        Note over Graph: Phase 1: Transcript Processing
+        Graph->>Storage: Fetch Transcript
+        Graph->>Graph: Chunk Transcript
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Graph: Phase 2: Notes Generation (Parallel)
+        loop For Each Chunk
+            Graph->>LLM: Generate Chunk Notes
+            LLM-->>Graph: Structured Notes
+        end
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Graph: Phase 3: Image Integration
+        Graph->>LLM: Generate Timestamps
+        Graph->>Storage: Extract Frames (FFmpeg)
+        Graph->>LLM: Integrate Images into Notes
+    end
+
+    rect rgb(255, 240, 255)
+        Note over Graph: Phase 4: Final Processing
+        Graph->>LLM: Format & Collect Notes
+        Graph->>LLM: Generate Summary
+        Graph->>Graph: Export to PDF
+    end
+
+    Graph->>Storage: Save Artifacts
+    Graph-->>API: Pipeline Complete
+    API-->>User: SSE: Final Results
+```
+
+### Pipeline Nodes
+
+| Node | Description |
+|------|-------------|
+| `create_transcript_chunks` | Splits transcript into configurable chunks |
+| `chunk_notes_agent` | Generates notes for each chunk |
+| `timestamp_generator_agent` | Identifies key timestamps for frames |
+| `extract_frames` | Extracts video frames using OpenCV |
+| `image_integrator_agent` | Integrates frames into notes |
+| `formatter_agent` | Formats notes with consistent styling |
+| `notes_collector_agent` | Combines all chunk notes |
+| `summarizer_agent` | Generates executive summary |
+| `exporter_agent` | Exports final PDF documents |
+
+---
 
 ## 🛠️ Tech Stack
 
-- **Backend / Orchestration**: Python, FastAPI, LangGraph
-- **LLM**: OpenAI, Google Gemini (or other LLMs)
-- **Transcript**: YouTube Transcript API / VTT / SRT / JSON
-- **Video Frames**: ffmpeg / OpenCV + CLIP (optional filtering)
-- **Frontend**: React (Vite + TypeScript)
-- **Storage**: MinIO (S3-compatible object storage)
-- **Database**: MongoDB (metadata and user management)
-- **Auth**: JWT token-based with RBAC (admin/user roles)
+### Backend
+| Technology | Purpose |
+|------------|---------|
+| **FastAPI** | Modern async Python web framework |
+| **LangGraph** | Multi-agent orchestration framework |
+| **LangChain** | LLM abstraction and tooling |
+| **LiteLLM** | Unified LLM provider interface |
+| **yt-dlp** | YouTube video/transcript download |
+| **OpenCV** | Video frame extraction |
+| **FFmpeg** | Video processing |
+| **Boto3** | MinIO/S3 client |
+| **PyMongo** | MongoDB driver |
+| **python-jose** | JWT authentication |
 
-## 🏗️ Infrastructure Setup
+### Frontend
+| Technology | Purpose |
+|------------|---------|
+| **React 19** | UI framework |
+| **Vite** | Build tool and dev server |
+| **TypeScript** | Type safety |
+| **TailwindCSS** | Utility-first styling |
+| **shadcn/ui** | Component library |
+| **React Query** | Server state management |
+| **Axios** | HTTP client |
+| **React Router** | Client-side routing |
+| **Lucide React** | Icon library |
 
-VidScribe uses MinIO for object storage and MongoDB for metadata. Use Docker Compose to start the services:
+### Infrastructure
+| Technology | Purpose |
+|------------|---------|
+| **MinIO** | S3-compatible object storage |
+| **MongoDB** | Document database |
+| **Docker** | Containerization |
+| **Docker Compose** | Multi-container orchestration |
 
-```bash
-# Start MinIO and MongoDB services
-docker-compose up -d minio mongodb
+---
 
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-**Service Details:**
-- **MinIO**: http://localhost:9000 (API), http://localhost:9001 (Console)
-  - Default credentials: `minioadmin` / `minioadmin`
-- **MongoDB**: localhost:27018
-  - Default credentials: `admin` / `password`
-
-Data is persisted in `./volumes/` directory.
-
-### Environment Configuration
-
-Copy the example environment file and configure as needed:
-
-```bash
-cd backend
-cp .env.example .env
-# Edit .env with your settings
-```
-
-Key environment variables:
-- `S3_ENDPOINT_URL`: MinIO endpoint (default: http://localhost:9000)
-- `MONGO_URI`: MongoDB connection string (default: mongodb://admin:password@localhost:27018)
-- `SECRET_KEY`: JWT secret key (change in production!)
-- `ADMIN_PASSWORD`: Initial admin user password
-
-## 🧪 FastAPI (API) Quickstart
-
-- POST /run/stream — live progress via Server-Sent Events (SSE)
-- POST /run/final — run to completion and return the final result as JSON
-- POST /videos/download — download a YouTube video (audio/video) to `backend/outputs/videos/{video_id}`
-- POST /videos/download/stream — stream progress events while downloading a video
-- GET /files/download?path=... — serve generated files (PDF, Markdown, media) from `backend/outputs`
-
-How to run locally:
-
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Example requests (now also require a `video_path` pointing to the local downloaded video; this is used for frame extraction):
-
-- Streaming (SSE). You can test with curl; it will print events as they arrive.
-
-```bash
-curl -N -H "Content-Type: application/json" \
-  -X POST http://localhost:8000/run/stream \
-  -d '{
-    "video_id": "wjZofJX0v4M",
-    "video_path": "/home/USER/Desktop/VidScribe/backend/outputs/videos/wjZofJX0v4M/Transformers_the_tech_behind_LLMs_Deep_Learning_Chapter_5.mp4",
-    "num_chunks": 2,
-    "provider": "google",
-    "model": "gemini-2.0-flash",
-    "stream_config": { "include_data": true }
-  }'
-```
-
-- Final-only JSON result:
-
-```bash
-curl -H "Content-Type: application/json" \
-  -X POST http://localhost:8000/run/final \
-  -d '{
-    "video_id": "wjZofJX0v4M",
-    "video_path": "/home/USER/Desktop/VidScribe/backend/outputs/videos/wjZofJX0v4M/Transformers_the_tech_behind_LLMs_Deep_Learning_Chapter_5.mp4",
-    "num_chunks": 2,
-    "provider": "google",
-    "model": "gemini-2.0-flash"
-  }'
-```
-
-- Download a YouTube video (returns JSON with file paths and pre-built download URLs):
-
-```bash
-curl -H "Content-Type: application/json" \
-  -X POST http://localhost:8000/videos/download \
-  -d '{
-    "video_id": "wjZofJX0v4M",
-    "resolution": 720
-  }'
-```
-
-- Stream video download progress (SSE). Each event contains status, byte counts, and final result metadata:
-
-```bash
-curl -N -H "Content-Type: application/json" \
-  -X POST http://localhost:8000/videos/download/stream \
-  -d '{
-    "video_id": "wjZofJX0v4M",
-    "resolution": 720
-  }'
-```
-
-- Download a generated asset (use `relative_path` returned by the API or any path under `backend/outputs`):
-
-```bash
-curl -L "http://localhost:8000/files/download?path=notes/wjZofJX0v4M/summary.pdf" --output summary.pdf
-```
-
-## 📤 Custom Video & Transcript Upload
-
-Upload your own videos and transcripts for processing without needing YouTube videos. Supports multiple transcript formats:
-
-### Upload Endpoints
-
-- **POST /uploads/video-and-transcript** — Upload a video file with transcript
-- **GET /uploads/check/{video_id}** — Check if video and transcript exist
-- **GET /uploads/list** — List all uploaded video folders
-
-### Supported Transcript Formats
-
-- **JSON**: YouTube transcript API format with `text`, `start`, and `duration` fields
-- **VTT**: WebVTT subtitle format (automatically converted)
-- **SRT**: SubRip subtitle format (automatically converted)
-
-### Upload Example
-
-```bash
-curl -X POST "http://localhost:8000/uploads/video-and-transcript" \
-  -F "video=@my_video.mp4" \
-  -F "transcript=@transcript.vtt" \
-  -F "video_id=my_custom_video"
-```
-
-### List Available Uploads
-
-```bash
-curl "http://localhost:8000/uploads/list"
-# Returns: {"uploaded_video_ids": ["upload_abc123", "upload_def456", ...]}
-```
-
-## 🗂️ Storage Management
-
-Manage storage space by deleting large video files and extracted frames. Transcripts and generated notes are preserved.
-
-### Storage Management Endpoints
-
-- **DELETE /uploads/videos/{video_id}** — Delete video files only
-- **DELETE /uploads/frames/{video_id}** — Delete frame images only
-- **DELETE /uploads/storage/{video_id}** — Delete both videos and frames
-
-### Delete Examples
-
-```bash
-# Delete video files only (frees most space)
-curl -X DELETE "http://localhost:8000/uploads/videos/upload_abc123"
-
-# Delete frame images only
-curl -X DELETE "http://localhost:8000/uploads/frames/upload_abc123"
-
-# Delete both videos and frames (maximum space freed)
-curl -X DELETE "http://localhost:8000/uploads/storage/upload_abc123"
-```
-
-Each deletion response includes the space freed in MB:
-
-```json
-{
-  "status": "success",
-  "video_id": "upload_abc123",
-  "message": "Successfully deleted storage for video_id: upload_abc123",
-  "deleted_items": { "videos": true, "frames": true },
-  "space_freed_mb": 245.67
-}
-```
-
-## 🖥️ Frontend (Vite + React)
-
-A dedicated Vite/React dashboard lives in `frontend/`. It mirrors the Gradio experience with:
-
-- Streaming progress from `/run/stream` via POST + SSE parsing
-- Final-run support using `/run/final`
-- Configurable stream shaping (compact mode, included fields, truncation limits)
-- Rich counters, event log, and per-section outputs for quick inspection
-- **Custom video & transcript upload** with support for VTT, SRT, and JSON formats
-- **Storage management** with dropdown selection of uploaded videos for deletion
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js 18 or newer (tested with npm 11)
-- The FastAPI server running locally (defaults to `http://localhost:8000`)
+- **Python 3.11+**
+- **Node.js 18+**
+- **Docker & Docker Compose**
+- **FFmpeg** (for video processing)
+- **Pandoc** (for markdown to PDF conversion)
+- **XeLaTeX** (LaTeX engine for PDF generation)
+  - macOS: `brew install --cask mactex-no-gui`
+  - Ubuntu/Debian: `sudo apt install texlive-xetex texlive-fonts-recommended`
 
-### Quickstart
+
+### Quick Start with Docker
 
 ```bash
-cd frontend
-npm install
-cp .env.example .env.local   # optional, adjust VITE_API_BASE_URL if backend differs
-npm run dev
+# Clone the repository
+git clone https://github.com/hari31416/VidScribe.git
+cd VidScribe
+
+# Copy environment files
+cp backend/.env.example backend/.env
+# Edit backend/.env with your LLM API keys
+
+# Start all services
+docker compose up -d
+
+# Access the application
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
+# MinIO Console: http://localhost:9001
 ```
 
-This starts Vite on `http://localhost:5173` (configurable via `VITE_PORT`). Update `VITE_API_BASE_URL` if your API listens on a different host or port.
-
-### Production build
+### Local Development
 
 ```bash
-cd frontend
-npm run build
-```
+# Start infrastructure services (MinIO + MongoDB)
+make up
 
-The optimized assets are emitted to `frontend/dist/` and can be served by any static host.
-
-## 🛠️ Makefile helpers
-
-The repository provides a top-level `Makefile` to streamline common workflows:
-
-```bash
-# Install backend (pip) and frontend (npm) dependencies
+# Install dependencies
 make install
 
-# Build the frontend bundle (backend currently has no build step)
-make build
-
-# Run just one side
-make backend-run
-make frontend-run
-
-# Launch FastAPI and the Vite dev server together (Ctrl+C stops both)
+# Run backend and frontend
 make run
+
+# View logs
+make logs
+
+# Stop services
+make stop
 ```
 
-Adjust `PYTHON`, `NPM`, or other variables when invoking make if your environment differs, for example `make PYTHON=python3.11 install`.
+### Makefile Commands
 
-Notes:
+| Command | Description |
+|---------|-------------|
+| `make install` | Install backend and frontend dependencies |
+| `make run` | Start backend and frontend in background |
+| `make stop` | Stop all services |
+| `make logs` | Tail backend and frontend logs |
+| `make up` | Start Docker infrastructure (MinIO, MongoDB) |
+| `make down` | Stop Docker infrastructure |
+| `make clean` | Remove build artifacts and logs |
 
-- The API reuses the existing LangGraph pipeline. For streaming, each SSE event now has shape `{ phase, progress, message, data, counters, stream }` (see schema below).
-- New pipeline phase: `image_integration` appears between `chunk_notes` and formatting when images are being integrated per chunk.
-- Progress mapping (heuristic): `chunks` (~20%) → `chunk_notes` (20–40%) → `image_integration` (40–50%) → `format_docs` (50–80%) → `collect_notes` (90%) → `summary` (100%).
-- `video_path` must point to the local MP4 used for frame extraction. You can derive it from the downloaded video directory (e.g. `backend/outputs/videos/{video_id}/...mp4`).
-- CORS is enabled for local development by default. Restrict origins before deploying.
+---
 
-### Event/response schema
+## ⚙️ Configuration
 
-- SSE event (from `/run/stream`):
+### Environment Variables
 
-```jsonc
-{
-  "phase": "chunk_notes", // string lifecycle phase
-  "progress": 35, // 0-100 (heuristic)
-  "message": "Chunk notes generated", // human-readable
-  "data": {
-    // shaped state subset
-    "chunks": ["..."],
-    "chunk_notes": ["..."],
-    "image_integrated_notes": ["..."],
-    "formatted_notes": ["..."],
-    "collected_notes": "...",
-    "summary": "...",
-    "timestamps_output": [[{ "timestamp": "00:00:42", "reason": "..." }]],
-    "image_insertions_output": [
-      [{ "timestamp": "00:00:42", "line_number": 3, "caption": "..." }]
-    ],
-    "extracted_images_output": [
-      [{ "timestamp": "00:00:42", "frame_path": ".../frame.jpg" }]
-    ],
-    "integrates": [
-      /* per-chunk integration objects */
-    ]
-  },
-  "counters": {
-    // derived real-time metrics
-    "expected_chunks": 10,
-    "notes_created": { "current": 3, "total": 10 },
-    "integrated_image_notes_created": { "current": 2, "total": 10 },
-    "formatted_notes_created": { "current": 1, "total": 10 },
-    "timestamps_created": {
-      "current_items": 18,
-      "chunks_completed": 3,
-      "total_chunks": 10
-    },
-    "image_insertions_created": {
-      "current_items": 12,
-      "chunks_completed": 2,
-      "total_chunks": 10
-    },
-    "extracted_images_created": {
-      "current_items": 5,
-      "chunks_completed": 2,
-      "total_chunks": 10
-    },
-    "finalization": { "collected": false, "summary": false },
-    "notes_by_type": {
-      "raw": 3,
-      "integrated": 2,
-      "formatted": 1,
-      "collected": 0,
-      "summary": 0
-    }
-  },
-  "stream": {
-    // stream metadata
-    "mode": "values", // "values" | "updates"
-    "update": null // present only for updates
-  }
-}
+Create a `.env` file in the `backend/` directory:
+
+```bash
+# MongoDB
+MONGO_URI=mongodb://admin:password@localhost:27018
+DEFAULT_USERNAME=default
+
+# MinIO / S3
+S3_ENDPOINT_URL=http://localhost:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_REGION=us-east-1
+S3_USE_SSL=false
+
+# Authentication
+SECRET_KEY=your-super-secret-key-change-in-production
+TOKEN_EXPIRE_MINUTES=1440
+
+# Admin User
+ADMIN_USER_NAME=admin
+ADMIN_PASSWORD=PassWord@1234
+ADMIN_EMAIL=admin@example.com
+
+# LLM Providers (add keys for providers you use)
+GOOGLE_API_KEY=your-google-key
+OPENAI_API_KEY=your-openai-key
+GROQ_API_KEY=your-groq-key
+
+# Logging
+LOG_LEVEL=warning
 ```
 
-- Final-only response (from `/run/final`) mirrors a single event without the `stream` block:
+### Frontend Configuration
 
-```jsonc
-{
-  "phase": "done",
-  "progress": 100,
-  "message": "Graph execution completed",
-  "data": {
-    /* same shape as above */
-  },
-  "counters": {
-    /* same shape as above */
-  }
-}
+Create a `.env` file in the `frontend/` directory:
+
+```bash
+VITE_API_URL=http://localhost:8000
 ```
 
-### stream_config
+---
 
-The `stream_config` object controls shaping of `data`:
+## 📚 API Reference
 
-- `include_data` (bool): default true
-- `include_fields` (list of strings): subset of fields to include. Valid keys:
-  - `chunks`, `chunk_notes`, `image_integrated_notes`, `formatted_notes`, `collected_notes`, `summary`
-  - `timestamps_output`, `image_insertions_output`, `extracted_images_output`, `integrates`
-- `max_items_per_field` (int): truncate list fields
-- `max_chars_per_field` (int): truncate long strings and list items
+### Authentication
 
-## ⚠️ Status
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/login` | POST | Login with username/password |
+| `/auth/register` | POST | Register new user |
+| `/auth/me` | GET | Get current user info |
 
-MVP is under active development: transcript → structured notes working; image extraction & integration stage added; API and Gradio support streaming with selectable fields including `image_integrated_notes`. Stream events now include derived `counters` and `stream` metadata to support richer progress UIs.
+### Projects & Uploads
 
-**Recent additions:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/uploads/list` | GET | List user's projects |
+| `/uploads/video-and-transcript` | POST | Upload video + transcript |
+| `/uploads/transcript-only` | POST | Upload transcript only |
+| `/uploads/check/{id}` | GET | Check project status |
+| `/uploads/project/{id}` | DELETE | Delete project |
+| `/uploads/stats/{id}` | GET | Get storage statistics |
 
-- ✅ Custom video & transcript upload support (VTT, SRT, JSON formats)
-- ✅ Storage management system for deleting videos and frames
-- ✅ Enhanced frontend with upload and storage management UI
-- ✅ Automatic transcript format conversion (VTT/SRT → JSON)
+### Pipeline Execution
 
-### Gradio UI Deprecation
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/run/stream` | POST | Run pipeline with SSE progress |
+| `/run/final` | POST | Run pipeline, return final result |
+| `/run/project/{id}/runs` | GET | List pipeline runs |
 
-Gradio UI is being deprecated in favor of the React frontend. The Gradio app will remain functional for now but will not receive further enhancements.
+### Downloads
 
-### React Frontend Features
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/files/download` | GET | Download project artifacts |
+| `/videos/download` | POST | Download YouTube video |
 
-- **Upload Panel**: Upload custom videos with VTT, SRT, or JSON transcripts
-- **Storage Management**: Dropdown selection of uploaded videos for deletion with space usage feedback
-- **Streaming Progress**: Real-time pipeline progress with counters and event logs
-- **Configuration Options**: Advanced settings for stream shaping and processing parameters
+---
 
-## The Architecture
+## 🐳 Docker Deployment
 
-```mermaid
-flowchart TD
-    %% Subgraph 1: Video Input to Chunk Generation
-    subgraph SG1 ["Transcript & Chunk Preparation"]
-        VI["Video Input"]
-        TG["Transcript Generator"]
-        CH["Chunker"]
-        NA["Notes Agent Chunk"]
-    end
+### Production Deployment
 
-    %% Subgraph 2: Raw Notes to Image Integration
-  subgraph SG2 ["Image Extraction & Integration"]
-    RN["Raw Notes (per chunk)"]
-    TS["Timestamp Generator"]
-    IE["Image Extractor (frames)"]
-    II["Image Integrator"]
-    IN["Integrated Notes (per chunk)"]
-    FN["Formatted Notes (per chunk)"]
-  end
+```bash
+# Build and start all services
+docker compose up -d --build
 
-    %% Subgraph 3: Integrated Notes to Final Notes & Summary
-    subgraph SG3 ["Notes Processing & Summarization"]
-        NC["Notes Collector"]
-        FN1[[Final Notes]]
-        SA["Summary Agent"]
-        SM[[Summary]]
-    end
+# View logs
+docker compose logs -f
 
-    %% Connections
-    MF["Markdown Formatter"]
-    VI --> TG --> CH --> NA
-    NA -->|"multiple chunks"| RN
-  RN --> TS --> IE --> II --> IN --> MF --> FN
-    FN -->|"multiple formatted chunks"| NC
-    MF <--> NC --> FN1
-    FN1 --> SA --> SM
-    SA <--> MF
+# Stop services
+docker compose down
 
-    %% Styles
-    classDef input fill:#ffefd5,stroke:#e67e22,stroke-width:2px,color:#000,font-weight:bold;
-    classDef process fill:#d1e8ff,stroke:#2980b9,stroke-width:2px,color:#000;
-    classDef agent fill:#eafbea,stroke:#27ae60,stroke-width:2px,color:#000,font-style:italic;
-    classDef output fill:#ffe6e6,stroke:#c0392b,stroke-width:2px,color:#000,font-weight:bold;
-    classDef special fill:#f9e6ff,stroke:#8e44ad,stroke-width:2px,color:#000;
-
-    %% Assign classes
-    class VI input;
-    class TG,CH process;
-    class NA,NC,MF,SA,TG,TS,II,IM agent;
-    class FS special;
-    class IE special;
-    class FN1,SM,RN,FN,IN output;
+# Stop and remove volumes (WARNING: deletes data)
+docker compose down -v
 ```
+
+### Service Ports
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend | 5173 | React application |
+| Backend | 8000 | FastAPI server |
+| MinIO API | 9000 | S3-compatible API |
+| MinIO Console | 9001 | Web management UI |
+| MongoDB | 27018 | Database (mapped from 27017) |
+
+---
+
+## 📁 Project Structure
+
+```
+VidScribe/
+├── backend/
+│   ├── app/
+│   │   ├── graph/           # LangGraph pipeline
+│   │   │   ├── nodes/       # Pipeline agents
+│   │   │   ├── graph.py     # Graph construction
+│   │   │   └── runner.py    # Pipeline execution
+│   │   ├── prompts/         # LLM system prompts
+│   │   ├── routes/          # API endpoints
+│   │   ├── services/        # Business logic
+│   │   └── utils/           # Utilities
+│   ├── main.py              # FastAPI app entry
+│   ├── requirements.txt     # Python dependencies
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── components/      # React components
+│   │   ├── pages/           # Page components
+│   │   ├── context/         # React context
+│   │   └── api.ts           # API client
+│   ├── package.json
+│   └── Dockerfile
+├── docker-compose.yml       # Multi-container setup
+├── Makefile                 # Development commands
+└── README.md
+```
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- [LangGraph](https://github.com/langchain-ai/langgraph) for the multi-agent framework
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube integration
+- [shadcn/ui](https://ui.shadcn.com/) for beautiful React components
