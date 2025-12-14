@@ -1,5 +1,5 @@
 from typing_extensions import TypedDict
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 import operator
 from pydantic import BaseModel
 
@@ -137,7 +137,8 @@ class RuntimeState(TypedDict):
     provider: str = "google"
     model: str = "gemini-2.0-flash"
     video_id: str
-    video_path: str
+    video_path: Optional[str] = None  # Optional for transcript-only uploads
     num_chunks: int = 2
     refresh_notes: bool = False
-    add_images: bool = True
+    add_images: bool = True  # Set to False for transcript-only mode
+    user_feedback: Optional[str] = None  # Optional user instructions for LLM

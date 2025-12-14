@@ -31,12 +31,14 @@ class StreamConfigModel(BaseModel):
 
 class RunRequest(BaseModel):
     video_id: str
-    video_path: str
+    video_path: Optional[str] = None  # Optional for transcript-only mode
     num_chunks: int = 2
     provider: str = "google"
     model: str = "gemini-2.0-flash"
     show_graph: bool = False
     refresh_notes: bool = False
+    add_images: bool = True  # Set to False for transcript-only mode
+    user_feedback: Optional[str] = None  # Optional user instructions for LLM
     stream_config: Optional[StreamConfigModel] = None
 
 
@@ -81,6 +83,8 @@ async def run_stream(req: RunRequest, request: Request):
                     provider=req.provider,
                     model=req.model,
                     show_graph=req.show_graph,
+                    add_images=req.add_images,
+                    user_feedback=req.user_feedback,
                     stream_config=sc,
                     cancel_event=cancel_event,
                     refresh_notes=req.refresh_notes,
@@ -167,6 +171,8 @@ async def run_final(req: RunRequest):
             provider=req.provider,
             model=req.model,
             show_graph=req.show_graph,
+            add_images=req.add_images,
+            user_feedback=req.user_feedback,
             stream_config=sc,
             refresh_notes=req.refresh_notes,
         ):

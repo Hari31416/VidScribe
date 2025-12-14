@@ -290,21 +290,45 @@ def _compute_counters(state: OverAllState, expected_chunks: int) -> Dict[str, An
 async def stream_run_graph(
     *,
     video_id: str,
-    video_path: str,
+    video_path: Optional[str] = None,
     num_chunks: int = 2,
     provider: str = "google",
     model: str = "gemini-2.0-flash",
     refresh_notes: bool = False,
     show_graph: bool = False,
+    add_images: bool = True,
+    user_feedback: Optional[str] = None,
     stream_config: Optional[StreamConfig] = None,
     cancel_event: Optional[asyncio.Event] = None,
 ) -> AsyncGenerator[ProgressEvent, None]:
     """Run the VidScribe graph and stream progress events with partial outputs.
 
+    Parameters
+    ----------
+    video_id : str
+        The video ID to process
+    video_path : Optional[str]
+        Path to the video file. Required if add_images=True.
+    add_images : bool
+        If True, extract frames and integrate images into notes.
+        If False, skip all image-related processing (transcript-only mode).
+    user_feedback : Optional[str]
+        Optional user instructions/preferences for the LLM to incorporate
+        when generating final notes and summary.
+
     Yields ProgressEvent dictionaries suitable for UI consumption.
     """
+    # Validate: if add_images is True, video_path is required
+    if add_images and not video_path:
+        yield {
+            "phase": "error",
+            "progress": 0,
+            "message": "video_path is required when add_images=True",
+            "data": {},
+        }
+        return
 
-    graph = create_graph(show_graph=show_graph)
+    graph = create_graph(show_graph=show_graph, add_images=add_images)
 
     state = _empty_overall_state()
     runtime = RuntimeState(
@@ -314,6 +338,8 @@ async def stream_run_graph(
         video_path=video_path,
         num_chunks=int(num_chunks),
         refresh_notes=refresh_notes,
+        add_images=add_images,
+        user_feedback=user_feedback,
     )
 
     # Early cancellation

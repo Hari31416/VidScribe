@@ -153,3 +153,4 @@ temp
 
 # data, to be used for caching transcripts and other files
 backend/outputs
+frontend_

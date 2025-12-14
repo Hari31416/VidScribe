@@ -10,7 +10,7 @@ langchain-litellm==0.2.2
 langchain-google-genai==2.1.10
 langchain_openai==0.3.33
 langchain-groq==0.3.8
-langchain-nvidia-ai-endpoints ==0.3.18
+langchain-nvidia-ai-endpoints==0.3.18
 
 
 # Transcript

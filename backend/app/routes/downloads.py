@@ -177,14 +177,21 @@ async def download_video_stream(req: DownloadVideoRequest) -> StreamingResponse:
 async def download_file(
     path: str = Query(
         ..., description="Path to file relative to the backend outputs directory."
-    )
+    ),
+    filename: Optional[str] = Query(
+        None, description="Optional custom filename for the downloaded file."
+    ),
 ):
     resolved_path = _resolve_requested_path(path)
     media_type, _ = mimetypes.guess_type(str(resolved_path))
+
+    # Use provided filename or default to the actual file name
+    download_filename = filename or resolved_path.name
+
     return FileResponse(
         resolved_path,
         media_type=media_type or "application/octet-stream",
-        filename=resolved_path.name,
+        filename=download_filename,
     )
 
 

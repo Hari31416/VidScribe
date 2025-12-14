@@ -41,7 +41,14 @@ async def summarizer_agent(state: SummarizerState, runtime: Runtime) -> Summariz
     llm = create_llm_instance(
         provider=runtime.context["provider"], model=runtime.context["model"]
     )
-    system_message = SystemMessage(content=SUMMARIZER_SYSTEM_PROMPT)
+
+    # Build system message with optional user feedback
+    system_content = SUMMARIZER_SYSTEM_PROMPT
+    user_feedback = runtime.context.get("user_feedback")
+    if user_feedback:
+        system_content += f"\n\n<user_instructions>\nThe user has provided the following additional instructions. Please incorporate these preferences when creating the summary:\n{user_feedback}\n</user_instructions>"
+
+    system_message = SystemMessage(content=system_content)
     human_message = HumanMessage(content=state["collected_notes"])
     response = await llm.ainvoke([system_message, human_message])
 
