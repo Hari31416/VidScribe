@@ -339,6 +339,20 @@ async def check_upload(video_id: str):
     notes_dir = OUTPUTS_DIR / "notes" / video_id
     has_notes = notes_dir.exists() and notes_dir.is_dir()
 
+    # Check for specific files
+    outputs = {
+        "final_notes_md": False,
+        "final_notes_pdf": False,
+        "summary_md": False,
+        "summary_pdf": False,
+    }
+
+    if has_notes:
+        outputs["final_notes_md"] = (notes_dir / "final_notes.md").exists()
+        outputs["final_notes_pdf"] = (notes_dir / "final_notes.pdf").exists()
+        outputs["summary_md"] = (notes_dir / "summary.md").exists()
+        outputs["summary_pdf"] = (notes_dir / "summary.pdf").exists()
+
     return {
         "video_id": video_id,
         "video_exists": video_exists,
@@ -351,6 +365,7 @@ async def check_upload(video_id: str):
         "ready_for_processing": transcript_exists,  # Transcript is sufficient for text-only processing
         "ready_for_processing_with_images": video_exists and transcript_exists,
         "has_notes": has_notes,
+        "outputs": outputs,
     }
 
 
@@ -381,12 +396,12 @@ def _get_directory_size(path: Path) -> float:
 @router.get("/list")
 async def list_uploads():
     """
-    List all uploaded video IDs (from both video directories and transcript files).
+    List all uploaded video IDs with their status.
 
     Returns
     -------
     dict
-        List of uploaded video IDs
+        List of project details
     """
     try:
         video_ids_from_dirs = {d.name for d in VIDEOS_DIR.iterdir() if d.is_dir()}
@@ -398,7 +413,15 @@ async def list_uploads():
 
         all_ids = sorted(list(video_ids_from_dirs | video_ids_from_transcripts))
 
-        return {"uploaded_video_ids": all_ids}
+        projects = []
+        for video_id in all_ids:
+            # Check for notes
+            notes_dir = OUTPUTS_DIR / "notes" / video_id
+            has_notes = notes_dir.exists() and notes_dir.is_dir()
+
+            projects.append({"id": video_id, "has_notes": has_notes})
+
+        return {"projects": projects}
     except Exception as e:
         logger.error(f"Failed to list uploads: {e}", exc_info=True)
         raise HTTPException(

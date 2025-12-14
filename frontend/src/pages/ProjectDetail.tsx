@@ -1,12 +1,13 @@
 import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Play, RotateCcw, AlertTriangle, CheckCircle, Loader2, FileText } from "lucide-react";
+import { Play, RotateCcw, AlertTriangle, CheckCircle, Loader2, FileText, ChevronDown, ChevronRight } from "lucide-react";
 
 import { api, endpoints } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import { LogViewer } from "@/components/LogViewer";
 import { NotesViewer } from "@/components/NotesViewer";
 import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
@@ -19,6 +20,10 @@ export function ProjectDetail() {
     const [logs, setLogs] = useState<string[]>([]);
     const [isRunning, setIsRunning] = useState(false);
     const [runStatus, setRunStatus] = useState<"idle" | "running" | "completed" | "error">("idle");
+    const [progress, setProgress] = useState(0);
+    const [progressMessage, setProgressMessage] = useState("");
+    const [counters, setCounters] = useState<Record<string, number>>({});
+    const [isLogsOpen, setIsLogsOpen] = useState(false);
 
     // Check project status
     const { data: projectData, isLoading, error } = useQuery({
@@ -59,6 +64,10 @@ export function ProjectDetail() {
         setIsRunning(true);
         setRunStatus("running");
         setLogs(["Starting pipeline service...", "Initializing graph connection..."]);
+        setProgress(0);
+        setProgressMessage("Initializing...");
+        setCounters({});
+        setIsLogsOpen(false); // Close logs by default on run
 
         // Create new AbortController
         abortControllerRef.current = new AbortController();
@@ -101,14 +110,34 @@ export function ProjectDetail() {
                     if (line.startsWith("data: ")) {
                         try {
                             const data = JSON.parse(line.slice(6));
-                            setLogs(prev => [...prev, JSON.stringify(data)]);
+                            // setLogs(prev => [...prev, JSON.stringify(data)]); // Too verbose to log all data
+
+                            // Update progress
+                            if (typeof data.progress === 'number') {
+                                setProgress(Math.round(data.progress * 100));
+                            }
+                            if (data.message) {
+                                setProgressMessage(data.message);
+                                setLogs(prev => [...prev, `[INFO] ${data.message}`]);
+                            }
+                            if (data.counters) {
+                                setCounters(data.counters);
+                            }
 
                             if (data.phase === "done" || data.event === "complete" || data.status === "completed") {
                                 setRunStatus("completed");
                                 setIsRunning(false);
+                                setProgress(100);
+                                setProgressMessage("Pipeline Completed Successfully");
                             }
-                            if (data.event === "error") {
+                            if (data.phase === "error" || data.event === "error" || data.status === "failed") {
                                 setRunStatus("error");
+                                setIsRunning(false);
+                                // Extract error message
+                                const errorMsg = data.message || data.error || "Unknown error occurred";
+                                setLogs(prev => [...prev, `[ERROR] ${errorMsg}`]);
+                                setProgressMessage(`Error: ${errorMsg}`);
+                                alert(`Pipeline Failed: ${errorMsg}`);
                             }
                         } catch (e) {
                             // ignore parse error
@@ -305,9 +334,61 @@ export function ProjectDetail() {
                                     </p>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <h3 className="text-sm font-medium">Live Logs</h3>
-                                    <LogViewer logs={logs} />
+                                <div className="space-y-4 pt-4 border-t">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="font-medium">{progressMessage || "Ready to start"}</span>
+                                            <span className="text-muted-foreground">{progress}%</span>
+                                        </div>
+                                        <Progress value={progress} className="h-2" />
+                                    </div>
+
+                                    {Object.keys(counters).length > 0 && (
+                                        <div className="flex gap-4 flex-wrap text-sm">
+                                            {Object.entries(counters).map(([key, value]) => {
+                                                // Safely render value, detecting if it is an object (like usage stats)
+                                                let displayValue: string | number = "";
+                                                if (typeof value === "object" && value !== null) {
+                                                    // If it's an object, try to render a sensible summary or stringify
+                                                    // Example: {current: 10, total: 100} -> "10 / 100"
+                                                    // Unknown object -> JSON.stringify
+                                                    const obj = value as any;
+                                                    if (obj.current !== undefined && obj.total !== undefined) {
+                                                        displayValue = `${obj.current} / ${obj.total}`;
+                                                    } else {
+                                                        displayValue = JSON.stringify(value);
+                                                    }
+                                                } else {
+                                                    displayValue = value;
+                                                }
+
+                                                return (
+                                                    <div key={key} className="flex flex-col bg-background border px-3 py-1.5 rounded shadow-sm min-w-[100px]">
+                                                        <span className="text-xs text-muted-foreground uppercase">{key}</span>
+                                                        <span className="font-bold text-lg">{displayValue}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    <div className="border rounded-md">
+                                        <div
+                                            className="flex items-center justify-between p-3 bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+                                            onClick={() => setIsLogsOpen(!isLogsOpen)}
+                                        >
+                                            <h3 className="text-sm font-medium flex items-center gap-2">
+                                                {isLogsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                                Raw Logs
+                                            </h3>
+                                            <span className="text-xs text-muted-foreground">{logs.length} events</span>
+                                        </div>
+                                        {isLogsOpen && (
+                                            <div className="border-t p-2 bg-black/95">
+                                                <LogViewer logs={logs} />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </CardContent>
@@ -325,15 +406,21 @@ export function ProjectDetail() {
                                 <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("transcripts/" + videoId + ".json", videoId + "_transcript.json")}`, "_blank")}>
                                     <FileText className="mr-2 h-4 w-4" /> Transcript (JSON)
                                 </Button>
-                                <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/final_notes.md", videoId + "_final_notes.md")}`, "_blank")}>
-                                    <FileText className="mr-2 h-4 w-4" /> Final Notes (Markdown)
-                                </Button>
-                                <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/final_notes.pdf", videoId + "_final_notes.pdf")}`, "_blank")}>
-                                    <FileText className="mr-2 h-4 w-4" /> Final Notes (PDF)
-                                </Button>
-                                <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/summary.md", videoId + "_summary.md")}`, "_blank")}>
-                                    <FileText className="mr-2 h-4 w-4" /> Summary (Markdown)
-                                </Button>
+                                {projectData.outputs?.final_notes_md && (
+                                    <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/final_notes.md", videoId + "_final_notes.md")}`, "_blank")}>
+                                        <FileText className="mr-2 h-4 w-4" /> Final Notes (Markdown)
+                                    </Button>
+                                )}
+                                {projectData.outputs?.final_notes_pdf && (
+                                    <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/final_notes.pdf", videoId + "_final_notes.pdf")}`, "_blank")}>
+                                        <FileText className="mr-2 h-4 w-4" /> Final Notes (PDF)
+                                    </Button>
+                                )}
+                                {projectData.outputs?.summary_md && (
+                                    <Button variant="outline" className="justify-start" onClick={() => window.open(`${api.defaults.baseURL}${endpoints.downloads.file("notes/" + videoId + "/summary.md", videoId + "_summary.md")}`, "_blank")}>
+                                        <FileText className="mr-2 h-4 w-4" /> Summary (Markdown)
+                                    </Button>
+                                )}
                             </div>
 
                             <div className="mt-8">
@@ -357,6 +444,7 @@ export function ProjectDetail() {
                                     </div>
                                 </div>
                                 <NotesViewer path={previewMode === "final" ? `notes/${videoId}/final_notes.md` : `notes/${videoId}/summary.md`} />
+                                {/* Optional: could show empty state if file doesn't exist, but NotesViewer handles 404s gracefully */}
                             </div>
                         </CardContent>
                     </Card>

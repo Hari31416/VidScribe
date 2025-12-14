@@ -5,14 +5,14 @@ import { Link } from "react-router-dom";
 
 import { useQuery } from "@tanstack/react-query";
 import { api, endpoints } from "@/api";
-import { Loader2, FileVideo } from "lucide-react";
+import { Loader2, FileVideo, CheckCircle } from "lucide-react";
 
 export function Dashboard() {
-    const { data, isLoading } = useQuery({
+    const { data: projects, isLoading } = useQuery({
         queryKey: ["uploads"],
         queryFn: async () => {
             const res = await api.get(endpoints.uploads.list);
-            return res.data.uploaded_video_ids as string[];
+            return res.data.projects as { id: string, has_notes: boolean }[];
         }
     });
 
@@ -41,18 +41,25 @@ export function Dashboard() {
                 {isLoading ? (
                     <div className="col-span-1 flex justify-center p-8"><Loader2 className="animate-spin" /></div>
                 ) : (
-                    data?.map(id => (
-                        <Link key={id} to={`/project/${id}`}>
+                        projects?.map(project => (
+                            <Link key={project.id} to={`/project/${project.id}`}>
                             <Card className="hover:border-primary transition-colors cursor-pointer h-[200px] flex flex-col justify-between">
                                 <div className="p-6">
                                     <div className="flex items-start justify-between">
                                         <div className="p-2 bg-primary/10 rounded-md">
                                             <FileVideo className="w-6 h-6 text-primary" />
                                         </div>
+                                            {project.has_notes && (
+                                                <div className="bg-green-100 text-green-800 p-1.5 rounded-full">
+                                                    <CheckCircle className="w-4 h-4" />
+                                                </div>
+                                            )}
                                     </div>
                                     <div className="mt-4">
-                                        <h3 className="font-semibold text-lg truncate" title={id}>{id}</h3>
-                                        <p className="text-xs text-muted-foreground">Ready to process</p>
+                                            <h3 className="font-semibold text-lg truncate" title={project.id}>{project.id}</h3>
+                                            <p className={`text-xs ${project.has_notes ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                                                {project.has_notes ? "Notes Generated" : "Ready to process"}
+                                            </p>
                                     </div>
                                 </div>
                             </Card>
