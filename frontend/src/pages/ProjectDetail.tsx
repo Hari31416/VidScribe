@@ -55,12 +55,21 @@ export function ProjectDetail() {
         enabled: !!videoId && videoId !== "undefined",
     });
 
-    // Set initial run ID when project loads
+    // Set initial run ID when project or runs load - default to latest run
     useEffect(() => {
-        if (projectData?.current_run_id && !currentRunId) {
+        if (currentRunId) return; // Already set
+
+        // If we have runs, select the latest one (sorted by created_at descending)
+        if (runsData && runsData.length > 0) {
+            const sortedRuns = [...runsData].sort((a: any, b: any) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            setCurrentRunId(sortedRuns[0].run_id);
+        } else if (projectData?.current_run_id) {
+        // Fallback to project's current_run_id
             setCurrentRunId(projectData.current_run_id);
         }
-    }, [projectData, currentRunId]);
+    }, [projectData, runsData, currentRunId]);
 
     const [config, setConfig] = useState({
         provider: "google",
